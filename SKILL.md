@@ -1,21 +1,21 @@
 ---
 name: everclaw
 version: 0.3.0
-description: Unlimited AI inference for OpenClaw agents via the Morpheus decentralized network. Stake MOR tokens, access Kimi K2.5 and 10+ models, and never run out of inference by recycling staked MOR. Includes OpenAI-compatible proxy with auto-session management, Gateway Guardian watchdog, and bundled security skills for protecting agents that handle valuable tokens.
+description: AI inference you own, forever powering your OpenClaw agents via the Morpheus decentralized network. Stake MOR tokens, access Kimi K2.5 and 10+ models, and maintain persistent inference by recycling staked MOR. Includes OpenAI-compatible proxy with auto-session management, Gateway Guardian watchdog, and bundled security skills for protecting agents that handle valuable tokens.
 homepage: https://everclaw.com
 metadata:
   openclaw:
     emoji: "♾️"
     requires:
       bins: ["curl", "op", "node"]
-    tags: ["inference", "everclaw", "morpheus", "mor", "decentralized", "ai", "blockchain", "base", "unlimited", "fallback", "guardian", "security"]
+    tags: ["inference", "everclaw", "morpheus", "mor", "decentralized", "ai", "blockchain", "base", "persistent", "fallback", "guardian", "security"]
 ---
 
-# ♾️ Everclaw — Unlimited Decentralized AI Inference
+# ♾️ Everclaw — AI Inference You Own, Forever Powering Your OpenClaw Agents
 
 *Powered by [Morpheus AI](https://mor.org)*
 
-Access Kimi K2.5, Qwen3, GLM-4, Llama 3.3, and 10+ models with effectively unlimited inference. Everclaw connects your OpenClaw agent to the Morpheus P2P network — stake MOR tokens, open sessions, and recycle your stake for inference that never runs out.
+Access Kimi K2.5, Qwen3, GLM-4, Llama 3.3, and 10+ models with inference you own. Everclaw connects your OpenClaw agent to the Morpheus P2P network — stake MOR tokens, open sessions, and recycle your stake for persistent, self-sovereign access to AI.
 
 ## How It Works
 
@@ -25,7 +25,7 @@ Access Kimi K2.5, Qwen3, GLM-4, Llama 3.3, and 10+ models with effectively unlim
 4. You **stake MOR tokens** to open a session with a provider (MOR is locked, not spent)
 5. You send inference requests to `http://localhost:8082/v1/chat/completions`
 6. When the session ends, your **MOR is returned** (minus tiny usage fees)
-7. Re-stake the returned MOR into new sessions → effectively unlimited inference
+7. Re-stake the returned MOR into new sessions → persistent inference you own
 
 ## Getting MOR Tokens
 

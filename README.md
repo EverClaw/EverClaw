@@ -1,8 +1,8 @@
-# ♾️ Everclaw — Unlimited AI Inference for OpenClaw Agents
+# ♾️ Everclaw — AI Inference You Own, Forever Powering Your OpenClaw Agents
 
-**Never run out of AI.** Everclaw connects your [OpenClaw](https://github.com/openclaw/openclaw) agent to the [Morpheus](https://mor.org) decentralized inference network — giving you access to Kimi K2.5, Qwen3, GLM-4, Llama 3.3, and 10+ open-source models powered by staked MOR tokens that recycle back to you.
+**Own your inference.** Everclaw connects your [OpenClaw](https://github.com/openclaw/openclaw) agent to the [Morpheus](https://mor.org) decentralized inference network — giving you consistent, self-sovereign access to Kimi K2.5, Qwen3, GLM-4, Llama 3.3, and 10+ open-source models powered by staked MOR tokens that recycle back to you.
 
-When your primary API credits run out, Everclaw kicks in automatically. Your agent stays online. No interruptions, no downtime, no surprise bills.
+When your primary API credits run out, Everclaw kicks in automatically. Your agent stays online. No interruptions, no downtime, no surprise bills. And because MOR is staked — not spent — you maintain access for as long as you hold your tokens.
 
 ---
 
@@ -67,7 +67,7 @@ The proxy handles all the blockchain complexity: opening sessions, renewing befo
 | **Auto-Session Manager** | Opens 7-day blockchain sessions on demand, renews before expiry, recycles MOR |
 | **MOR Swap Scripts** | Swap ETH or USDC for MOR tokens directly from the command line |
 
-**Benefit:** Your agent gets unlimited inference from 10+ open-source models (Kimi K2.5, Qwen3, GLM-4, Llama 3.3, and more) at effectively zero marginal cost. MOR is staked, not spent.
+**Benefit:** Your agent gets persistent access to 10+ open-source models (Kimi K2.5, Qwen3, GLM-4, Llama 3.3, and more) that you own through staked MOR tokens. No API bills, no credit limits — stake once, use continuously.
 
 ### 🛡️ Gateway Guardian — Self-Healing Agent
 | Component | What It Does |
@@ -143,7 +143,7 @@ MOR is **staked, not spent**. Here's how the economics work:
 | 1 day | ~274 MOR | Returned after 1 day |
 | **7 days** | **~1,915 MOR** | **Returned after 7 days (default)** |
 
-When a session ends, your MOR comes back. Open a new session with the same tokens. This is what makes inference effectively unlimited — you're renting compute with a refundable deposit, not buying API credits.
+When a session ends, your MOR comes back. Open a new session with the same tokens. This is what makes the access yours forever — you're staking a refundable deposit for compute, not buying consumable API credits.
 
 **Getting started:** 50–100 MOR is enough for daily use. Swap from ETH on Base using the included scripts.
 
