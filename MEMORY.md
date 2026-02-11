@@ -69,7 +69,19 @@ Rejected BlockRunAI/ClawRouter: routes through BlockRun API (middleman), plainte
 
 ---
 
+## SmartAgentProtocol (GitHub Org)
+- Org: https://github.com/orgs/SmartAgentProtocol
+- Role: admin/owner (profbernardoj)
+- Description: "Open Source Chat Interface For Wallets, Dapps, DAOs, & Smart Contracts"
+- **Vision:** Full version of OpenClaw with Everclaw improvements, packaged for non-technical users
+- **Workflow:** PRs, code review, CI testing — higher bar than Everclaw's direct-push model
+- **Target users:** People not comfortable with Terminal — needs GUI installer / one-click setup
+- **Starting Feb 12, 2026**
+
+---
+
 ## Upcoming
+- **SmartAgentProtocol development** — Feb 12 (PRs, testing practices, easy-install packaging)
 - Publish Everclaw to ClawHub on Feb 16 (cron job `6ff30a74` scheduled)
 - ~~Version x402 + agent registry as v0.7~~ DONE
 - Investigate Signal-cli connection drops and thread starvation
