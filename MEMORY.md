@@ -35,6 +35,15 @@ Last updated: 2026-02-11
   - Identity: `0x8004A169FB4a3325136EB29fA0ceB6D2e539a432`
   - Reputation: `0x8004BAa17C55a88189AE136b182e5fdA19dE9b63`
 
+### Morpheus API Gateway (v0.8 — in progress)
+- Base URL: `https://api.mor.org/api/v1` (NOT `/v1` — needs `/api/v1`)
+- OpenAI-compatible, 34 models, free beta until March 1 2026
+- Provider name in OpenClaw: `mor-gateway`
+- Community bootstrap key (SmartAgentProtocol): base64-obfuscated in `scripts/bootstrap-gateway.mjs`
+- **Blocker:** Both API keys need "session automation" enabled at app.mor.org — David needs to do this
+- Reminder set for Feb 22 re: March 1 beta expiry (cron ID: 9b7d448c)
+- Purpose: eliminate need for Claude API key for new OpenClaw users — bootstrap with free Morpheus inference
+
 ### MOR Economics
 - MOR is staked, not consumed — recycled after sessions close
 - ~88 MOR in wallet, ~900+ staked in sessions, ~9,000 MOR in Safe
@@ -52,6 +61,9 @@ Last updated: 2026-02-11
 ---
 
 ## Lessons Learned
+
+### Morpheus models need reasoning: false in OpenClaw config (2026-02-11)
+All Morpheus provider models (kimi-k2.5, kimi-k2-thinking, glm-4.7-flash) must have `"reasoning": false` in openclaw.json. The upstream litellm rejects the `reasoning_effort` parameter — if set to true, cron jobs using Morpheus models fail with HTTP 400. Fixed via config.patch.
 
 ### Morpheus Proxy Error Classification (2026-02-11)
 Morpheus infrastructure failures (502s) must return `type: "server_error"` not `"billing"` — otherwise OpenClaw triggers extended cooldown and cascades across all providers.
@@ -80,7 +92,15 @@ Rejected BlockRunAI/ClawRouter: routes through BlockRun API (middleman), plainte
 
 ---
 
+## Key People & Thinkers
+- **Balaji Srinivasan** (@balajis) — Network School founder, *The Network State* author
+  - Network State = voluntary smart contract governance (opt-in, replaces nation-state force model)
+  - 10 durable skills in AI age: vision, verification, prompting, polishing, community, geography, scarcity, cryptography, physicality, resiliency
+  - Relevant to: Abolition of State goal + Family education framework
+  - Full quote saved: `memory/insights/balaji-value-in-age-of-ai.md`
+
 ## Upcoming
+- **Everclaw v0.8** — Morpheus API Gateway bootstrap (blocked on automation toggle at app.mor.org)
 - **SmartAgentProtocol development** — Feb 12 (PRs, testing practices, easy-install packaging)
 - Publish Everclaw to ClawHub on Feb 16 (cron job `6ff30a74` scheduled)
 - ~~Version x402 + agent registry as v0.7~~ DONE
