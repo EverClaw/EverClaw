@@ -6,7 +6,7 @@ Last updated: 2026-02-11
 
 ## Everclaw Skill (profbernardoj/everclaw)
 
-### Current Version: v0.7.0
+### Current Version: v0.8.0
 - OpenClaw skill for decentralized AI inference via Morpheus network
 - Website: everclaw.xyz (GitHub Pages from docs/)
 - Repo: profbernardoj/everclaw on GitHub
@@ -35,12 +35,12 @@ Last updated: 2026-02-11
   - Identity: `0x8004A169FB4a3325136EB29fA0ceB6D2e539a432`
   - Reputation: `0x8004BAa17C55a88189AE136b182e5fdA19dE9b63`
 
-### Morpheus API Gateway (v0.8 — in progress)
+### Morpheus API Gateway (v0.8 — shipped)
 - Base URL: `https://api.mor.org/api/v1` (NOT `/v1` — needs `/api/v1`)
 - OpenAI-compatible, 34 models, free beta until March 1 2026
 - Provider name in OpenClaw: `mor-gateway`
 - Community bootstrap key (SmartAgentProtocol): base64-obfuscated in `scripts/bootstrap-gateway.mjs`
-- **Blocker:** Both API keys need "session automation" enabled at app.mor.org — David needs to do this
+- Session automation must be enabled at app.mor.org for each account
 - Reminder set for Feb 22 re: March 1 beta expiry (cron ID: 9b7d448c)
 - Purpose: eliminate need for Claude API key for new OpenClaw users — bootstrap with free Morpheus inference
 
