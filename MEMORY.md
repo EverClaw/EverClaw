@@ -6,7 +6,7 @@ Last updated: 2026-02-11
 
 ## Everclaw Skill (profbernardoj/everclaw)
 
-### Current Version: v0.8.0
+### Current Version: v0.9.0
 - OpenClaw skill for decentralized AI inference via Morpheus network
 - Website: everclaw.xyz (GitHub Pages from docs/)
 - Repo: profbernardoj/everclaw on GitHub
