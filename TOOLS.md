@@ -134,12 +134,16 @@ curl -s -u "admin:$COOKIE_PASS" "http://localhost:8082/v1/chat/completions" \
 ```
 **⚠️ `session_id` and `model_id` MUST be HTTP headers, not JSON body fields. This is the #1 gotcha.**
 
-### Available Models (as of 2026-02-09)
+### Available Models (as of 2026-02-12)
 | Model | Model ID (prefix) |
 |-------|-------------------|
 | kimi-k2.5:web | 0xb487... |
 | kimi-k2.5 | 0xbb9e... |
 | kimi-k2-thinking | 0xc40b... |
+| **GLM-5** | (new, via mor-gateway) |
+| **GLM-5:web** | (new, via mor-gateway) |
+| **MiniMax M2.5** | (new, via mor-gateway) |
+| **MiniMax M2.5:web** | (new, via mor-gateway) |
 | glm-4.7-flash | 0xfdc5... |
 | glm-4.7 | 0xed0a... |
 | qwen3-235b | 0x2a71... |
