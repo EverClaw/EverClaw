@@ -20,8 +20,25 @@
   - Focus on: clear communication (prompting), critical thinking (verification), physical capability, community building
   - Full quote: `memory/insights/balaji-value-in-age-of-ai.md`
 
+## Family Fitness
+- **WHOOP devices** — David and Cayla plan to get WHOOP fitness trackers
+- Explore OpenClaw + WHOOP integration for health dashboards (see: Scoble report use case #50 — WHOOP Fitness Dashboard on Raspberry Pi with Cloudflare Tunnel, daily habit tracking, biomarker goals)
+- When devices arrive: set up health metrics integration, daily briefings with fitness data, shared family fitness goals
+
+## Family AI Hub
+- David plans to set up **individual OpenClaw agents** for each family member:
+  - **Cayla** (wife)
+  - **Savannah** (10)
+  - **Sydney** (8)
+  - **Sofia** (6)
+  - **Daniel** (1)
+  - **Leia** (25, adoptive daughter)
+- Inspiration: Scoble report use case #20 — @ryanseamons running multiple bots for family with Apple ecosystem access
+- Considerations: age-appropriate configurations, parental oversight for kids' agents, shared family calendar/reminders, education-focused skills for the girls
+
 ## Actions Taken
 - 2026-02-11: Saved Balaji education framework for guiding children's skill development
+- 2026-02-15: Noted WHOOP fitness integration plans and family AI hub (individual agents per family member)
 
 ## Actions Suggested (avoid repeating)
 - (none yet)
