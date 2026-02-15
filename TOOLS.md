@@ -134,23 +134,20 @@ curl -s -u "admin:$COOKIE_PASS" "http://localhost:8082/v1/chat/completions" \
 ```
 **⚠️ `session_id` and `model_id` MUST be HTTP headers, not JSON body fields. This is the #1 gotcha.**
 
-### Available Models (as of 2026-02-12)
-| Model | Model ID (prefix) |
-|-------|-------------------|
-| kimi-k2.5:web | 0xb487... |
-| kimi-k2.5 | 0xbb9e... |
-| kimi-k2-thinking | 0xc40b... |
-| **GLM-5** | (new, via mor-gateway) |
-| **GLM-5:web** | (new, via mor-gateway) |
-| **MiniMax M2.5** | (new, via mor-gateway) |
-| **MiniMax M2.5:web** | (new, via mor-gateway) |
-| glm-4.7-flash | 0xfdc5... |
-| glm-4.7 | 0xed0a... |
-| qwen3-235b | 0x2a71... |
-| qwen3-coder-480b | 0x4709... |
-| hermes-3-llama-3.1-405b | 0x7e14... |
-| llama-3.3-70b | 0xc753... |
-| gpt-oss-120b | 0x2e72... |
+### Available Models (as of 2026-02-15)
+| Model | Model ID (prefix) | Notes |
+|-------|-------------------|-------|
+| **glm-5** | 0x2034... | ⭐ DEFAULT — Opus 4.5 level, via local Morpheus proxy |
+| glm-4.7-flash | 0xfdc5... | LIGHT tier — fast, trivial tasks |
+| glm-4.7 | 0xed0a... | |
+| kimi-k2.5 | 0xbb9e... | Legacy default, replaced by GLM-5 |
+| kimi-k2.5:web | 0xb487... | |
+| kimi-k2-thinking | 0xc40b... | |
+| qwen3-235b | 0x2a71... | |
+| llama-3.3-70b | 0xc753... | DO NOT USE |
+| gpt-oss-120b | 0x2e72... | |
+
+**MiniMax-M2.5:** Available on mor-gateway and Venice but DO NOT USE — severe latency issues, broken streaming, unreliable. Revisit later.
 
 ### MOR Economics
 - Sessions stake MOR proportional to duration × price_per_second
