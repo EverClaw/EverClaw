@@ -6,7 +6,7 @@ Last updated: 2026-02-14
 
 ## Everclaw Skill (profbernardoj/everclaw)
 
-### Current Version: v0.9.2 (latest push removes Llama 3.3 refs)
+### Current Version: v0.9.4 (smart session archiver)
 - OpenClaw skill for decentralized AI inference via Morpheus network
 - Website: everclaw.xyz (GitHub Pages from docs/)
 - Repo: profbernardoj/everclaw on GitHub
@@ -29,11 +29,14 @@ Last updated: 2026-02-14
 - Same model, fresh credits — agent stays on Claude instead of falling to cheaper models
 - Only after ALL 6 keys are disabled does OpenClaw fall to model fallback chain (Morpheus)
 
-### Model Router (v0.6)
+### Model Router (v0.6 → v0.7 open-source first)
 - `scripts/router.mjs` — 13-dimension weighted prompt classifier, <1ms
-- 3 tiers: LIGHT (glm-4.7-flash), STANDARD (kimi-k2.5), HEAVY (claude-opus-4-6)
+- **Open-source first design** — Morpheus handles everything, Claude is escape hatch only
+- 3 tiers: LIGHT (glm-4.7-flash), STANDARD (glm-5), HEAVY (glm-5 → claude fallback)
+- GLM-5 replaces Kimi K2.5 as default (Feb 15 2026)
+- GLM-5 tested on: reasoning, complex coding, structured output, agentic tasks — all Opus 4.5 level
 - Reasoning override: 2+ keywords → force HEAVY
-- Ambiguous → STANDARD (safe/free)
+- Ambiguous → STANDARD (safe/free via Morpheus)
 
 ### x402 + ERC-8004 (v0.7 — shipped)
 - `scripts/x402-client.mjs` — auto HTTP 402 payment flow, EIP-712 signing, USDC on Base
@@ -42,6 +45,14 @@ Last updated: 2026-02-14
 - Key contract addresses (same on all chains):
   - Identity: `0x8004A169FB4a3325136EB29fA0ceB6D2e539a432`
   - Reputation: `0x8004BAa17C55a88189AE136b182e5fdA19dE9b63`
+
+### Smart Session Archiver (v0.9.4 — shipped)
+- `scripts/session-archive.sh` — size-triggered session archiver
+- Default threshold: 10MB (browsers choke at ~15-20MB of session DOM)
+- Protects active sessions, guardian probe, keeps 5 most recent
+- Cron job runs every 6 hours, no-op when under threshold
+- Replaced the fixed "every 2 days" approach with intelligent size monitoring
+- Root cause: 134 sessions (17MB) = "Page Unresponsive" in all browsers
 
 ### Morpheus API Gateway (v0.8 — shipped)
 - Base URL: `https://api.mor.org/api/v1` (NOT `/v1` — needs `/api/v1`)
@@ -61,10 +72,12 @@ Last updated: 2026-02-14
 
 ## David's Model Preferences
 - **DO NOT use:** llama-3.3-70b, deepseek-v3.2 as backup models
-- Claude 4.6: complex reasoning only (expensive)
-- Kimi K2.5: most cron/sub-agent work (free via Morpheus)
+- **Open-source first:** Morpheus models handle everything possible, Claude only as fallback
+- GLM-5: default for most work (free via Morpheus, Opus 4.5 level quality)
 - GLM 4.7 Flash: trivial tasks (free, fast)
-- All 10 isolated cron jobs use `morpheus/kimi-k2.5`
+- Claude 4.6: fallback only when GLM-5 can't complete the task (expensive)
+- Cron jobs should migrate from `morpheus/kimi-k2.5` to `morpheus/glm-5`
+- MiniMax-M2.5: available on mor-gateway and Venice but has latency issues (streaming broken on Venice, mor-gateway unreliable). Better at coding benchmarks but GLM-5 is better all-rounder
 
 ---
 
