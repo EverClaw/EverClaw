@@ -51,6 +51,10 @@
 - **Daniel Johnston** (son) — Born October 7, 2024 (1 year old)
 - **Andrew Johnston** (son) — Expected 2026 (IVF)
 
+### Educational Options for Children
+
+**GT School (Anywhere)** — AI-powered Gifted and Talented program worth exploring for the girls. https://anywhere.gt.school/
+
 ---
 
 ## Life Goals & Values
