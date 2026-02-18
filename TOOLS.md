@@ -112,7 +112,7 @@ git log --oneline -20
 ## Morpheus Lumerin Node (Decentralized Inference)
 
 ### Overview
-Running Morpheus proxy-router v5.11.0 as a **consumer** on Base mainnet. Stakes MOR tokens to open sessions with providers, then routes inference through the Morpheus P2P network. OpenAI-compatible API at `http://localhost:8082`.
+Running Morpheus proxy-router v5.12.0 as a **consumer** on Base mainnet. Stakes MOR tokens to open sessions with providers, then routes inference through the Morpheus P2P network. OpenAI-compatible API at `http://localhost:8082`.
 
 ### Installation
 - **Location:** `~/morpheus/`
@@ -121,11 +121,17 @@ Running Morpheus proxy-router v5.11.0 as a **consumer** on Base mainnet. Stakes 
 - **Downloaded from:** GitHub releases (MorpheusAIs/Morpheus-Lumerin-Node)
 
 ### Configuration Files
-- **`.env`** — Main config (ETH_NODE_ADDRESS, contracts, proxy settings, logging)
+- **`.env`** — Main config (ETH_NODE_ADDRESS, contracts, proxy settings, logging, timeouts)
 - **`models-config.json`** — Maps blockchain model IDs to OpenAI-compatible apiType
 - **`.cookie`** — Auto-generated auth credentials (format: `admin:<password>`)
 - **`proxy.conf`** — Auth config file
 - **`mor-launch.sh`** — Secure launch script (injects key from 1Password)
+
+### Timeout Configuration (v5.12.0)
+- **LLM_TIMEOUT=5m** — Provider→LLM timeout (streaming + non-streaming)
+- **CNODE_PNODE_TIMEOUT=90s** — Per-attempt timeout for Consumer waiting on Provider
+- **CNODE_PNODE_MAX_RETRIES=3** — Retries for chat/embeddings (total ~7.5 min)
+- **CNODE_PNODE_AUDIO_MAX_RETRIES=20** — Retries for audio transcription/speech
 
 ### Key Addresses
 - **Diamond contract:** `0x6aBE1d282f72B474E54527D93b979A4f64d3030a` (Base mainnet)
@@ -192,6 +198,8 @@ curl -s -u "admin:$COOKIE_PASS" "http://localhost:8082/v1/chat/completions" \
 - **MorpheusUI conflicts:** UI kills and restarts proxy-router; don't run both simultaneously for headless
 - **ETH_NODE_ADDRESS:** Must be in .env or exported; router silently uses empty string without it
 - **"dial tcp: missing address":** Provider endpoint resolution issue; use model ID endpoint not bid ID
+- **Timeout errors:** v5.12.0+ has configurable timeouts via LLM_TIMEOUT, CNODE_PNODE_TIMEOUT env vars
+- **BadgerDB corruption:** v5.12.0+ fixes shutdown flush and race conditions; upgrade if seeing vlog errors
 - **Logs:** `~/morpheus/data/logs/router-stdout*.log`
 
 ### Morpheus-to-OpenAI Proxy (for OpenClaw fallback)

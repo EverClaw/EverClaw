@@ -56,3 +56,4 @@
 ## Actions Suggested (avoid repeating)
 - 2026-02-10: Draft "Private AI Inference" positioning brief for Based AI
 - 2026-02-10: Propose "Agent-Ready Sessions" as Morpheus governance initiative
+- 2026-02-17: Write "Distributed AI Inference: Centralized vs Decentralized" competitive analysis — Equinix/Groq vs Morpheus/Based AI positioning for enterprise sales + March 1 GA launch
