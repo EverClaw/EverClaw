@@ -42,7 +42,7 @@ status: complete
 ### AI Model Flavors (6)
 - MorpheusClaw — For decentralized AI advocates
 - GLMClaw — For Chinese AI users
-- KamiClaw — For long-context researchers
+- KimiClaw — For long-context researchers
 - GrokClaw — For X power users
 - LlamaClaw — For open weights advocates
 - MiniMaxClaw — For cost-conscious users

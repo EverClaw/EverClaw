@@ -53,7 +53,7 @@ Avoid centralized AI players controlling/extracting value from everyone via cent
 | HomeClaw | homeclaw.org | Smart home | Home Assistant users, smart home |
 | InstallOpenClaw | installopenclaw.xyz | Installer | Entry point, generic funnel |
 | InvestClaw | investclaw.ai | Investment | Investors, portfolio management |
-| KamiClaw | kamiclaw.co | Kimi models | Long-context users |
+| KimiClaw | kimiclaw.co | Kimi models | Long-context users |
 | LinuxClaw | linuxclaw.com | Linux | Linux power users, servers |
 | LlamaClaw | llamaclaw.org | Llama models | Open weights advocates |
 | MiniMaxClaw | minimaxclaw.com | MiniMax models | MiniMax users |

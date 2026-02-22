@@ -160,7 +160,7 @@ status: complete
 | **Where They Live** | X/Twitter (#Grok, #xAI), X Premium communities |
 | **Key Strategy** | Position as "Grok, but yours" — same personality, your control |
 
-#### KamiClaw.co — Kimi Model Users (Long-Context)
+#### KimiClaw.co — Kimi Model Users (Long-Context)
 | Attribute | Details |
 |-----------|---------|
 | **Who** | Long-context users, Chinese/international Kimi users |

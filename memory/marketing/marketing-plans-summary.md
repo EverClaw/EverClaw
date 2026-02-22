@@ -25,7 +25,7 @@ status: complete
 |--------|--------|------------|---------|---------|
 | MorpheusClaw | MOR holders | "No board. No CEO. No off switch." | ✅ | ✅ |
 | GLMClaw | Chinese AI users | "The first AI that speaks fluent Chinese and English" | ✅ | ✅ |
-| KamiClaw | Researchers | "Kimi reads 1M tokens. KamiClaw remembers them." | ✅ | ✅ |
+| KimiClaw | Researchers | "Kimi reads 1M tokens. KimiClaw remembers them." | ✅ | ✅ |
 | GrokClaw | X power users | "The first AI that doesn't lecture you" | ✅ | ✅ |
 | LlamaClaw | Open source | "The first AI that runs on your hardware" | ✅ | ✅ |
 | MiniMaxClaw | Cost-conscious | "Quality AND cost. Finally both." | ✅ | ✅ |
@@ -73,7 +73,7 @@ status: complete
 - EthereumClaw, BaseClaw, SolanaClaw, ArbClaw
 
 ### Week 3: AI Model Flavors
-- MorpheusClaw, GLMClaw, KamiClaw, GrokClaw, LlamaClaw, MiniMaxClaw, DeepSeekClaw
+- MorpheusClaw, GLMClaw, KimiClaw, GrokClaw, LlamaClaw, MiniMaxClaw, DeepSeekClaw
 
 ### Week 4: Use Case Flavors
 - FamilyClaw, FamilyOfficeClaw, InvestClaw, VCIClaw, FriendClaw, EmailClaw, OfficeClaw, HomeClaw, BookingClaw, BriefingClaw

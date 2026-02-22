@@ -145,8 +145,8 @@ Each narrative should:
 
 ---
 
-### KamiClaw
-> "The first AI with infinite memory. Kimi reads 1M tokens. KamiClaw remembers them."
+### KimiClaw
+> "The first AI with infinite memory. Kimi reads 1M tokens. KimiClaw remembers them."
 
 **Viral angle:** Long context is wasted without memory.
 
@@ -155,7 +155,7 @@ Each narrative should:
 > 
 > Then forgets everything.
 > 
-> KamiClaw doesn't forget.
+> KimiClaw doesn't forget.
 > 
 > The first AI with infinite memory.
 > 

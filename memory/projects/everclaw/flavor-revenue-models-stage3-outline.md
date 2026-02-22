@@ -46,7 +46,7 @@ status: active
 |--------|----------------|-------------------|
 | MorpheusClaw | MOR staking | Community membership |
 | GLMClaw | API usage tracking | MOR staking |
-| KamiClaw | Research subscription | MOR staking |
+| KimiClaw | Research subscription | MOR staking |
 | GrokClaw | X analytics premium | MOR staking |
 | LlamaClaw | Enterprise support | MOR staking |
 | MiniMaxClaw | Usage optimization | MOR staking |

@@ -1,8 +1,8 @@
 ---
-tags: [marketing, flavor, kamiclaw-stage1]
+tags: [marketing, flavor, kimiclaw-stage1]
 status: complete
 ---
-# KamiClaw — Stage 1 Marketing Plan
+# KimiClaw — Stage 1 Marketing Plan
 
 **Created:** February 19, 2026
 **Status:** Draft
@@ -34,7 +34,7 @@ status: complete
 You chose Kimi for its massive context window. 1 million tokens of understanding. But every session starts fresh. Your research threads are scattered. Citations are manual. And finding that one insight across 50 PDFs you analyzed last month? Good luck.
 
 ### The Solution
-**KamiClaw: Your long-context research companion.**
+**KimiClaw: Your long-context research companion.**
 
 - Remember every document, every conversation, every insight
 - Build a research memory that spans sessions
@@ -50,7 +50,7 @@ You chose Kimi for its massive context window. 1 million tokens of understanding
 ## Landing Page Outline
 
 ### Hero Section
-**Headline:** KamiClaw — Your Long-Context Research Companion
+**Headline:** KimiClaw — Your Long-Context Research Companion
 
 **Subhead:** Built for Kimi users. Remember every document, every insight, every conversation.
 
@@ -67,7 +67,7 @@ You chose Kimi for its massive context window. 1 million tokens of understanding
 - The power of long context is wasted on amnesia
 
 ### Solution Section
-**Headline:** KamiClaw: Research Memory for Kimi
+**Headline:** KimiClaw: Research Memory for Kimi
 
 **Features:**
 - **Document Memory** — Every PDF you've analyzed, indexed forever
@@ -79,7 +79,7 @@ You chose Kimi for its massive context window. 1 million tokens of understanding
 ### How It Works
 1. **Connect** — Your Kimi account or API key
 2. **Ingest** — Documents, papers, reports, transcripts
-3. **Analyze** — Let Kimi and KamiClaw work together
+3. **Analyze** — Let Kimi and KimiClaw work together
 4. **Remember** — Every insight saved, searchable, citable
 5. **Own it** — Runs locally, your data, your research
 
@@ -91,7 +91,7 @@ You chose Kimi for its massive context window. 1 million tokens of understanding
 ### CTA Section
 **Headline:** Long context deserves long memory
 
-**CTA:** [Get KamiClaw]
+**CTA:** [Get KimiClaw]
 
 ---
 
@@ -110,17 +110,17 @@ You chose Kimi for its massive context window. 1 million tokens of understanding
 ### Long-form Content (Blog/Mirror)
 - "How to Build a Research Memory System for Kimi"
 - "Long-Context AI: Beyond the Context Window"
-- "The Citation Problem: How KamiClaw Solves It"
+- "The Citation Problem: How KimiClaw Solves It"
 - "1 Million Tokens: What Can You Actually Do With It?"
 
 ### Short-form (X)
 - Threads: "5 ways to maximize Kimi's 1M token window"
 - Research tips: "How I organize 100+ PDFs for Kimi analysis"
-- Use cases: "Legal document review with KamiClaw"
+- Use cases: "Legal document review with KimiClaw"
 - Demos: "Watch Kimi analyze a 500-page report"
 
 ### Video
-- 60-second: "KamiClaw in 60 seconds"
+- 60-second: "KimiClaw in 60 seconds"
 - Tutorial: "Building a research memory with Kimi"
 - Demo: "Finding that one insight from 50 documents"
 
@@ -129,7 +129,7 @@ You chose Kimi for its massive context window. 1 million tokens of understanding
 ## Referral Tracking
 
 ### Tracking Mechanism
-- UTM parameters: `?ref=kamiclaw&source=twitter&utm_campaign=launch`
+- UTM parameters: `?ref=kimiclaw&source=twitter&utm_campaign=launch`
 - Unique referral codes for academic influencers, research communities
 - Cookie duration: 30 days
 
@@ -143,13 +143,13 @@ You chose Kimi for its massive context window. 1 million tokens of understanding
 ## Launch Sequence
 
 ### Pre-Launch (Week 1-2)
-- [ ] Secure twitter.com/kamiclaw and @kamiclaw handle
+- [ ] Secure twitter.com/kimiclaw and @kimiclaw handle
 - [ ] Create Discord community (research-focused)
 - [ ] Reach out to 5-10 academic/research AI influencers
 - [ ] Draft blog post: "Long-Context AI: Beyond the Context Window"
 
 ### Launch (Week 3)
-- [ ] Landing page live at kamiclaw.com
+- [ ] Landing page live at kimiclaw.com
 - [ ] X thread announcement
 - [ ] Research community shares
 - [ ] Academic influencer endorsements
@@ -174,13 +174,13 @@ You chose Kimi for its massive context window. 1 million tokens of understanding
 
 ---
 
-## Unique Angles for KamiClaw
+## Unique Angles for KimiClaw
 
 ### Long-Context Specialist
 Position as the only agent built specifically for Kimi's massive context window. "We understand what 1M tokens means."
 
 ### Research Memory
-"Kimi reads. KamiClaw remembers." Every document, every conversation, indexed forever.
+"Kimi reads. KimiClaw remembers." Every document, every conversation, indexed forever.
 
 ### Citation Engine
 Auto-cite from your corpus. Huge value prop for academics and legal professionals.

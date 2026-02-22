@@ -1,11 +1,11 @@
 ---
-tags: [marketing, flavor, kamiclaw]
+tags: [marketing, flavor, kimiclaw]
 status: complete
 ---
-# KamiClaw Marketing Plan — Stage 2: Content & Messaging Strategy
+# KimiClaw Marketing Plan — Stage 2: Content & Messaging Strategy
 
 **Created:** 2026-02-19
-**Flavor:** KamiClaw (kamiclaw.com)
+**Flavor:** KimiClaw (kimiclaw.com)
 **Target:** Kimi model users, long-context AI users, researchers
 
 ---
@@ -15,12 +15,12 @@ status: complete
 ### Primary Positioning
 **"Kimi never forgets. Now neither will your research."**
 
-KamiClaw is the AI agent for Kimi users — research memory, document management, citation tracking, and long-context optimization.
+KimiClaw is the AI agent for Kimi users — research memory, document management, citation tracking, and long-context optimization.
 
 ### Value Proposition Statement
 > Kimi reads 1M tokens. But every session starts fresh. Your research threads are scattered. Citations are manual.
 > 
-> Connect KamiClaw and get an AI that:
+> Connect KimiClaw and get an AI that:
 > - Remembers every document you've ever analyzed
 > - Builds a research memory that spans sessions
 > - Auto-cites sources from your document corpus
@@ -42,9 +42,9 @@ KamiClaw is the AI agent for Kimi users — research memory, document management
 ## X/Twitter Content Strategy
 
 ### Account Setup
-- **Handle:** @KamiClaw
-- **Bio:** "AI for Kimi users. Research memory. Document management. Citation tracking. kamiclaw.com"
-- **Profile Image:** KamiClaw logo
+- **Handle:** @KimiClaw
+- **Bio:** "AI for Kimi users. Research memory. Document management. Citation tracking. kimiclaw.com"
+- **Profile Image:** KimiClaw logo
 - **Header:** Long-context/document visualization
 
 ### Posting Cadence
@@ -75,14 +75,14 @@ Research use cases, literature review, thesis work.
 > 
 > What if Kimi remembered every document you ever analyzed?
 > 
-> KamiClaw gives Kimi a memory.
+> KimiClaw gives Kimi a memory.
 
 **Long-Context:**
 > "I analyzed 50 PDFs last month. Now I need to find one insight."
 > 
 > → manual search through 50 files
 > 
-> → Ask KamiClaw: "Find the insight about [topic]"
+> → Ask KimiClaw: "Find the insight about [topic]"
 > 
 > 30 seconds vs. 3 hours.
 
@@ -91,14 +91,14 @@ Research use cases, literature review, thesis work.
 > 
 > → scroll through 100 pages
 > 
-> → KamiClaw cites it automatically
+> → KimiClaw cites it automatically
 > 
 > Research just got easier.
 
 **Academic:**
 > Literature review. 200 papers. 6 months.
 > 
-> Or: KamiClaw + Kimi.4 weeks.
+> Or: KimiClaw + Kimi.4 weeks.
 > 
 > Built for researchers.
 
@@ -125,7 +125,7 @@ Research use cases, literature review, thesis work.
 
 1. **"How to Build a Research Memory for Kimi"**
 2. **"Long-Context AI: Beyond the Context Window"**
-3. **"Literature Review with KamiClaw + Kimi"**
+3. **"Literature Review with KimiClaw + Kimi"**
 4. **"Finding That One Insight from 50 Documents"**
 5. **"The Citation Problem: Solved"**
 
@@ -146,7 +146,7 @@ Research use cases, literature review, thesis work.
 
 > Hey [Name],
 > 
-> I built KamiClaw — an AI agent for Kimi users who do research.
+> I built KimiClaw — an AI agent for Kimi users who do research.
 > 
 > Features: research memory, document management, citation tracking.
 > 
@@ -199,7 +199,7 @@ Research use cases, literature review, thesis work.
 ---
 
 ## Next Steps
-- [ ] Secure @KamiClaw on X
+- [ ] Secure @KimiClaw on X
 - [ ] Create research-themed visual assets
 - [ ] Write first 10 tweets
 - [ ] Set up YouTube channel

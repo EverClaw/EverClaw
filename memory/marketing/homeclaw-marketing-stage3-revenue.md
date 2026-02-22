@@ -213,7 +213,7 @@ HomeClaw is one of 28 EverClaw flavors. Each flavor drives traffic to others:
 |----------|---------|
 | Platform | AndroidClaw, AppleClaw, LinuxClaw, WindowsClaw |
 | Protocol | BitcoinClaw, EthereumClaw, SolanaClaw, ArbClaw, BaseClaw |
-| AI Model | GLMClaw, GrokClaw, KamiClaw, LlamaClaw, MiniMaxClaw, DeepSeekClaw, MorpheusClaw |
+| AI Model | GLMClaw, GrokClaw, KimiClaw, LlamaClaw, MiniMaxClaw, DeepSeekClaw, MorpheusClaw |
 | Use Case | EmailClaw, HomeClaw, FamilyClaw, FriendClaw, OfficeClaw, BookingClaw, BriefingClaw, InvestClaw, VCIClaw, FamilyOfficeClaw |
 | Entry | InstallOpenClaw.xyz |
 
