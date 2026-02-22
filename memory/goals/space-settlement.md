@@ -1,3 +1,7 @@
+---
+tags: [goal, space-settlement]
+status: active
+---
 # 🚀 Space Settlement — Strategic Context
 
 ## Active Projects

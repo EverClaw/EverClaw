@@ -1,3 +1,7 @@
+---
+tags: [goal, great-commission-family]
+status: active
+---
 # ⛪ Great Commission & Family — Strategic Context
 
 ## Great Commission

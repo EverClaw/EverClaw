@@ -1,3 +1,7 @@
+---
+tags: [goal, wealth-creation]
+status: active
+---
 # 💰 Wealth Creation — Strategic Context
 
 ## Active Projects

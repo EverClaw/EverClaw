@@ -1,3 +1,7 @@
+---
+tags: [goal, abolition-of-state]
+status: active
+---
 # 🏴 Abolition of the State — Strategic Context
 
 ## Vision

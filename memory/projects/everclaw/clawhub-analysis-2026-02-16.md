@@ -1,3 +1,7 @@
+---
+tags: [project, everclaw]
+status: active
+---
 # ClawHub Skills Analysis - Revealed Preferences
 **Date:** 2026-02-16
 **Purpose:** Prep for conversation with Kyle (Morpheus API Gateway developer)

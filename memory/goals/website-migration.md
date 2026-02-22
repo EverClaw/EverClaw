@@ -1,3 +1,7 @@
+---
+tags: [goal, website-migration]
+status: active
+---
 # 🌐 Website Migration — Strikingly → GitHub Pages
 
 ## Status: TODO (noted Feb 10, 2026)

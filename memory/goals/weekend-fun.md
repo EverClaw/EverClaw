@@ -1,3 +1,7 @@
+---
+tags: [goal, weekend-fun]
+status: active
+---
 # 🎉 Weekend Fun — Context
 
 ## Family
