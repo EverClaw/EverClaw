@@ -1,0 +1,11 @@
+[Unit]
+Description=Run Everclaw Gateway Guardian every 2 minutes
+Documentation=https://github.com/EverClaw/everclaw
+
+[Timer]
+OnBootSec=30
+OnUnitActiveSec=120
+AccuracySec=15
+
+[Install]
+WantedBy=timers.target

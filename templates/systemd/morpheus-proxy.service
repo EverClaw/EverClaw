@@ -1,0 +1,24 @@
+[Unit]
+Description=Morpheus-to-OpenAI Proxy (Everclaw)
+Documentation=https://github.com/EverClaw/everclaw
+After=morpheus-router.service
+Wants=morpheus-router.service
+
+[Service]
+Type=simple
+ExecStart=__NODE_PATH__ __PROXY_SCRIPT_PATH__
+WorkingDirectory=__MORPHEUS_DIR__/proxy
+Environment=MORPHEUS_DIR=__MORPHEUS_DIR__
+Restart=on-failure
+RestartSec=5
+StandardOutput=append:__MORPHEUS_DIR__/proxy/proxy.log
+StandardError=append:__MORPHEUS_DIR__/proxy/proxy-error.log
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=__MORPHEUS_DIR__
+PrivateTmp=true
+
+[Install]
+WantedBy=default.target

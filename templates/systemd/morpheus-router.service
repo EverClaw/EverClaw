@@ -1,0 +1,23 @@
+[Unit]
+Description=Morpheus Proxy-Router (Everclaw)
+Documentation=https://github.com/EverClaw/everclaw
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=__MORPHEUS_DIR__/mor-launch-headless.sh
+WorkingDirectory=__MORPHEUS_DIR__
+Restart=on-failure
+RestartSec=10
+StandardOutput=append:__MORPHEUS_DIR__/data/logs/router-stdout.log
+StandardError=append:__MORPHEUS_DIR__/data/logs/router-stderr.log
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=__MORPHEUS_DIR__
+PrivateTmp=true
+
+[Install]
+WantedBy=default.target

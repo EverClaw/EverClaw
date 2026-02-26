@@ -2,7 +2,7 @@
 # diagnose.sh — Everclaw Health Diagnostic
 #
 # Step 1: Config checks (no network, no processes, pure file parsing)
-# Step 2: Infrastructure checks (TODO — network, processes, inference)
+# Step 2: Infrastructure checks (network, processes, inference, services)
 #
 # Usage:
 #   bash skills/everclaw/scripts/diagnose.sh            # All checks
@@ -285,7 +285,11 @@ run_infra_checks() {
       info "  Process is running but not responding on HTTP"
       fix "Check logs: tail ~/morpheus/data/logs/router-stdout.log"
     else
-      fix "Start it: launchctl load ~/Library/LaunchAgents/com.morpheus.router.plist"
+      if [[ "$(uname)" == "Darwin" ]]; then
+        fix "Start it: launchctl load ~/Library/LaunchAgents/com.morpheus.router.plist"
+      elif command -v systemctl &>/dev/null; then
+        fix "Start it: systemctl --user start morpheus-router"
+      fi
       fix "Or manually: cd ~/morpheus && bash mor-launch-headless.sh"
     fi
   fi
@@ -301,7 +305,11 @@ run_infra_checks() {
     if pgrep -f morpheus-proxy >/dev/null 2>&1; then
       fix "Process running but not healthy — check ~/morpheus/proxy/proxy.log"
     else
-      fix "Start it: launchctl load ~/Library/LaunchAgents/com.morpheus.proxy.plist"
+      if [[ "$(uname)" == "Darwin" ]]; then
+        fix "Start it: launchctl load ~/Library/LaunchAgents/com.morpheus.proxy.plist"
+      elif command -v systemctl &>/dev/null; then
+        fix "Start it: systemctl --user start morpheus-proxy"
+      fi
     fi
   fi
 
@@ -453,8 +461,9 @@ else:
     fi
   fi
 
-  # B8: Are launchd services loaded? (macOS only)
+  # B8: Are service managers running the Everclaw services?
   if [[ "$(uname)" == "Darwin" ]]; then
+    # macOS — check launchd
     echo ""
     local services=("com.morpheus.router" "com.morpheus.proxy" "ai.openclaw.guardian")
     local svc_names=("Proxy-router" "Morpheus proxy" "Gateway Guardian")
@@ -485,6 +494,40 @@ else:
         all_loaded=false
       fi
     done
+
+  elif [[ "$(uname)" == "Linux" ]] && command -v systemctl &>/dev/null; then
+    # Linux — check systemd user units
+    echo ""
+    local services=("morpheus-router" "morpheus-proxy" "everclaw-guardian.timer")
+    local svc_names=("Proxy-router" "Morpheus proxy" "Gateway Guardian timer")
+
+    for i in "${!services[@]}"; do
+      local svc="${services[$i]}"
+      local name="${svc_names[$i]}"
+
+      if systemctl --user is-active "$svc" &>/dev/null; then
+        pass "$name ($svc) active"
+      elif systemctl --user is-enabled "$svc" &>/dev/null; then
+        warn "$name ($svc) enabled but not active"
+        fix "Start: systemctl --user start $svc"
+      elif [[ -f "$HOME/.config/systemd/user/${svc}.service" ]] || [[ -f "$HOME/.config/systemd/user/${svc}" ]]; then
+        warn "$name ($svc) unit exists but not enabled"
+        fix "Enable: systemctl --user enable --now $svc"
+      else
+        warn "$name ($svc) not installed"
+        fix "Run: bash skills/everclaw/scripts/install-proxy.sh"
+      fi
+    done
+
+    # Check lingering (needed for services to survive logout)
+    if command -v loginctl &>/dev/null; then
+      if loginctl show-user "$(whoami)" --property=Linger 2>/dev/null | grep -q "yes"; then
+        pass "Lingering enabled (services persist after logout)"
+      else
+        warn "Lingering not enabled — services will stop on logout"
+        fix "Enable: loginctl enable-linger $(whoami)"
+      fi
+    fi
   fi
 
   # B9: Is the OpenClaw gateway running?

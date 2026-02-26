@@ -1,0 +1,12 @@
+[Unit]
+Description=Everclaw Gateway Guardian (Health Watchdog)
+Documentation=https://github.com/EverClaw/everclaw
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=__GUARDIAN_SCRIPT_PATH__
+Environment=HOME=__HOME__
+Environment=OPENCLAW_DIR=__OPENCLAW_DIR__
+StandardOutput=append:__OPENCLAW_DIR__/logs/guardian.log
+StandardError=append:__OPENCLAW_DIR__/logs/guardian-error.log
