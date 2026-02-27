@@ -10,7 +10,7 @@ Your agent runs on inference you own: GLM-5, GLM-4.7 Flash, Kimi K2.5, and 30+ m
 
 ## Install
 
-**From ClawHub:**
+**From ClawHub::**
 
 ```bash
 clawhub install everclaw-inference
