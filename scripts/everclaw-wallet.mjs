@@ -26,6 +26,11 @@ const KEYCHAIN_ACCOUNT = process.env.EVERCLAW_KEYCHAIN_ACCOUNT || "everclaw-agen
 const KEYCHAIN_SERVICE = process.env.EVERCLAW_KEYCHAIN_SERVICE || "everclaw-wallet-key";
 const RPC_URL = process.env.EVERCLAW_RPC || "https://base-mainnet.public.blastapi.io";
 
+// --- Safety Configuration ---
+const SLIPPAGE_BPS = parseInt(process.env.EVERCLAW_SLIPPAGE_BPS || "100", 10); // 100 = 1%
+const TX_CONFIRMATIONS = parseInt(process.env.EVERCLAW_CONFIRMATIONS || "1", 10);
+const MAX_GAS_LIMIT = BigInt(process.env.EVERCLAW_MAX_GAS || "500000");
+
 // --- Contract Addresses (Base Mainnet) ---
 const MOR_TOKEN = "0x7431aDa8a591C955a994a21710752EF9b882b8e3";
 const USDC_TOKEN = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
@@ -44,6 +49,10 @@ const ERC20_ABI = parseAbi([
 
 const SWAP_ROUTER_ABI = parseAbi([
   "function exactInputSingle((address tokenIn, address tokenOut, uint24 fee, address recipient, uint256 amountIn, uint256 amountOutMinimum, uint160 sqrtPriceLimitX96)) payable returns (uint256 amountOut)",
+]);
+
+const QUOTER_ABI = parseAbi([
+  "function quoteExactInputSingle((address tokenIn, address tokenOut, uint256 amountIn, uint24 fee, uint160 sqrtPriceLimitX96)) returns (uint256 amountOut, uint160 sqrtPriceX96After, uint32 initializedTicksCrossed, uint256 gasEstimate)",
 ]);
 
 // --- Keychain Helpers ---
@@ -105,6 +114,42 @@ function getWalletClient(privateKey) {
 
 function getAccount(privateKey) {
   return privateKeyToAccount(privateKey);
+}
+
+// --- Transaction Helpers ---
+
+/** Wait for tx receipt and verify it succeeded. Throws on revert. */
+async function waitAndVerify(publicClient, hash, label = "Transaction") {
+  const receipt = await publicClient.waitForTransactionReceipt({
+    hash,
+    confirmations: TX_CONFIRMATIONS,
+  });
+  if (receipt.status === "reverted" || receipt.status === "0x0") {
+    throw new Error(`${label} reverted (tx: ${hash})`);
+  }
+  return receipt;
+}
+
+/** Get a quote from Uniswap V3 QuoterV2 for slippage calculation */
+async function getQuote(publicClient, tokenIn, tokenOut, amountIn, fee) {
+  try {
+    const result = await publicClient.simulateContract({
+      address: UNISWAP_QUOTER,
+      abi: QUOTER_ABI,
+      functionName: "quoteExactInputSingle",
+      args: [{ tokenIn, tokenOut, amountIn, fee, sqrtPriceLimitX96: 0n }],
+    });
+    return result.result[0]; // amountOut
+  } catch (e) {
+    console.warn(`   ⚠️  Quote failed (${e.shortMessage || e.message}), using zero minimum`);
+    return 0n;
+  }
+}
+
+/** Apply slippage tolerance: reduce expected output by SLIPPAGE_BPS */
+function applySlippage(amountOut) {
+  if (amountOut === 0n) return 0n;
+  return amountOut - (amountOut * BigInt(SLIPPAGE_BPS)) / 10000n;
 }
 
 // --- Commands ---
@@ -240,10 +285,20 @@ async function cmdSwap(tokenIn, amountStr) {
       abi: ERC20_ABI,
       functionName: "approve",
       args: [UNISWAP_ROUTER, amountIn],
+      gas: MAX_GAS_LIMIT,
     });
     console.log(`   Approve tx: ${approveTx}`);
-    await publicClient.waitForTransactionReceipt({ hash: approveTx });
+    await waitAndVerify(publicClient, approveTx, "USDC approve");
     console.log("   ✓ Approved\n");
+  }
+
+  // Get quote for slippage protection
+  console.log(`   Getting quote (slippage tolerance: ${SLIPPAGE_BPS / 100}%)...`);
+  const quotedOutput = await getQuote(publicClient, tokenInAddress, MOR_TOKEN, amountIn, fee);
+  const amountOutMinimum = applySlippage(quotedOutput);
+  if (quotedOutput > 0n) {
+    console.log(`   Expected: ~${formatEther(quotedOutput)} MOR`);
+    console.log(`   Minimum:  ~${formatEther(amountOutMinimum)} MOR\n`);
   }
 
   // Execute swap
@@ -253,7 +308,7 @@ async function cmdSwap(tokenIn, amountStr) {
     fee,
     recipient: account.address,
     amountIn,
-    amountOutMinimum: 0n, // Accept any amount (slippage tolerance for simplicity)
+    amountOutMinimum,
     sqrtPriceLimitX96: 0n,
   };
 
@@ -265,25 +320,23 @@ async function cmdSwap(tokenIn, amountStr) {
       abi: SWAP_ROUTER_ABI,
       functionName: "exactInputSingle",
       args: [swapParams],
-      value: isETH ? amountIn : 0n, // Send ETH value for ETH swaps
+      value: isETH ? amountIn : 0n,
+      gas: MAX_GAS_LIMIT,
     });
 
     console.log(`   Swap tx: ${tx}`);
-    const receipt = await publicClient.waitForTransactionReceipt({ hash: tx });
+    const receipt = await waitAndVerify(publicClient, tx, "Swap");
 
-    if (receipt.status === "success") {
-      // Check new MOR balance
-      const morBalance = await publicClient.readContract({
-        address: MOR_TOKEN,
-        abi: ERC20_ABI,
-        functionName: "balanceOf",
-        args: [account.address],
-      });
-      console.log(`\n   ✅ Swap successful!`);
-      console.log(`   MOR balance: ${formatEther(morBalance)}`);
-    } else {
-      console.error("\n   ❌ Swap transaction reverted.");
-    }
+    // Check new MOR balance
+    const morBalance = await publicClient.readContract({
+      address: MOR_TOKEN,
+      abi: ERC20_ABI,
+      functionName: "balanceOf",
+      args: [account.address],
+    });
+    console.log(`\n   ✅ Swap successful!`);
+    console.log(`   MOR balance: ${formatEther(morBalance)}`);
+    console.log(`   Gas used: ${receipt.gasUsed}`);
   } catch (e) {
     console.error(`\n   ❌ Swap failed: ${e.shortMessage || e.message}`);
     process.exit(1);
@@ -315,10 +368,11 @@ async function cmdApprove(amountStr) {
       abi: ERC20_ABI,
       functionName: "approve",
       args: [DIAMOND_CONTRACT, amount],
+      gas: MAX_GAS_LIMIT,
     });
 
     console.log(`   Tx: ${tx}`);
-    await publicClient.waitForTransactionReceipt({ hash: tx });
+    await waitAndVerify(publicClient, tx, "Approve");
     console.log("   ✅ MOR approved for staking.\n");
   } catch (e) {
     console.error(`   ❌ Approve failed: ${e.shortMessage || e.message}`);
@@ -378,9 +432,12 @@ Commands:
   import-key <0xkey>       Import existing private key
 
 Environment:
-  EVERCLAW_RPC             Base RPC URL (default: public blastapi)
+  EVERCLAW_RPC               Base RPC URL (default: public blastapi)
   EVERCLAW_KEYCHAIN_ACCOUNT  Keychain account name (default: everclaw-agent)
   EVERCLAW_KEYCHAIN_SERVICE  Keychain service name (default: everclaw-wallet-key)
+  EVERCLAW_SLIPPAGE_BPS      Slippage tolerance in basis points (default: 100 = 1%)
+  EVERCLAW_CONFIRMATIONS     Block confirmations to wait (default: 1)
+  EVERCLAW_MAX_GAS           Gas limit for transactions (default: 500000)
 
 Examples:
   node everclaw-wallet.mjs setup
