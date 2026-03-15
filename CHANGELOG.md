@@ -2,6 +2,17 @@
 
 All notable changes to EverClaw are documented here.
 
+## [2026.3.19] - 2026-03-15
+
+### Fixed
+- **morpheus-proxy.mjs** — Model refresh was parsing router response incorrectly
+  - Router returns `{ models: [...] }` but code expected raw array
+  - Fix: `const data = JSON.parse(res.body.toString()); const models = Array.isArray(data) ? data : (data.models || []);`
+  - Result: Model list now refreshes correctly, showing 40 models including GLM-5
+  - Backwards compatible — handles both array and object formats
+
+---
+
 ## [2026.3.18] - 2026-03-15
 
 ### Security — Phase 1 Audit Hardening (morpheus-proxy.mjs)
