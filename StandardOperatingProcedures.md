@@ -17,270 +17,267 @@
 
 ## SOP-001: Development & Deployment
 
-**Version:** 1.0
-**Created:** 2026-03-08
-**Purpose:** Ensure consistent, safe, and verified code deployment across all EverClaw-related repositories.
+> **Canonical source:** `memory/reference/SOP-001.md` — this section is synced from there.
 
-### Overview
 
-All development and deployment tasks follow this 6-stage process. Each stage requires David's review before proceeding to the next.
+## Pipeline Stages
 
----
-
-### Stage 1: Planning & Design
-
-**Goal:** Define what will be built and get approval before coding.
-
-#### Steps
-1. Analyze requirements and define scope
-2. Research existing code, dependencies, and patterns
-3. Design the solution architecture
-4. Identify affected files and repositories
-5. Assess risks and mitigation strategies
-6. Present comprehensive plan to David for approval
-
-#### Deliverable
-- Written plan with:
-  - Problem statement
-  - Proposed solution
-  - Files/modules affected
-  - Dependencies and integration points
-  - Risk assessment
-  - Estimated scope
-
-#### Gate
-**David must approve the design before proceeding to Stage 2.**
+| Stage | Name | Description | Gate |
+|-------|------|-------------|------|
+| 0 | **Research** | Survey landscape, evaluate options, produce research brief | David reviews brief, picks direction |
+| 1 | **Planning** | Requirements, architecture, design decisions | David approval |
+| 2 | **Coding** | Implementation, commits to working branch | Compiles clean |
+| 3 | **Dependency Check** | Detect new deps, update installer if needed | Installer covers all deps |
+| 4 | **Audit** | Cross-model security review, line-by-line verification | All changes rated Excellent |
+| 5 | **Testing** | Unit tests, integration tests, edge cases | All tests pass |
+| 6 | **PII Scan** | Scan for leaked keys, addresses, personal data | 0 PII findings |
+| 7 | **Documentation** | Update SKILL.md, CHANGELOG, README, architecture docs | Docs reviewed |
+| 8 | **Primary Deploy** | Push to `EverClaw/EverClaw` (org) + `profbernardoj/everclaw` | Clean push |
+| 9 | **Ecosystem Deploy** | Sync to all 28+ flavor repos via `ecosystem-sync.sh` | All repos synced |
+| 10 | **Package Tag & Docker** | Version bump, git tag, Docker image build via GitHub Actions | Image verified |
 
 ---
 
-### Stage 2: Coding
+## Stage Details
 
-**Goal:** Implement the approved design in manageable stages.
+### Stage 0 — Research
 
-#### Steps
-1. Create or switch to appropriate branch
-2. Implement changes in logical, reviewable commits
-3. **Verify all external dependency URLs, commands, and install methods against their official documentation before using them** (see External Dependency Verification below)
-4. Document changes in code comments and changelogs
-5. Update version numbers where applicable
-6. Report progress to David after each significant stage
+- **Executed by the Researcher agent** (`researcher`, Claude Opus 4.6)
+- Survey the landscape: existing solutions, SDKs, packages, protocols, prior art
+- Search npm, GitHub, docs, and community resources for candidate tools
+- Read documentation, changelogs, GitHub issues for each candidate
+- Evaluate trade-offs: pros/cons/risks for each option
+- Check compatibility with our stack (Node version, existing deps, patterns)
+- Identify dependencies, licensing, maintenance status, breaking change history
+- Produce a **Research Brief** saved to `memory/research/<topic>.md`
+- **Research Brief structure:**
+  - Problem statement and context
+  - Options evaluated (with pros/cons table)
+  - Compatibility notes (Node version, existing deps, patterns)
+  - Recommended approach + rationale
+  - Open questions / blockers
+  - Links to docs and references
+  - Date and researcher ID
+- David reviews the brief and picks a direction
+- Only then does Stage 1 (Planning) begin
+- **Skip condition:** If the problem space is well-understood and no external deps are involved, David can approve skipping directly to Stage 1
 
-#### External Dependency Verification (MANDATORY)
+### Stage 1 — Planning
 
-**Never assume a URL, install command, or API endpoint for an external project.** Always verify against the project's official source before writing it into code.
+- Define what's being built or fixed
+- Write specs, architecture decisions, scope
+- Identify affected files and dependencies
+- David approves before coding begins
 
-**For each external dependency referenced in code:**
-1. Check the project's official README or docs for the canonical install method
-2. Test that URLs actually resolve (`curl -fsSL -o /dev/null -w "%{http_code}" <url>`)
-3. Verify CLI commands exist and have the expected flags
-4. Confirm API endpoints and response formats against official docs
-5. Document the source of truth for each dependency's install/URL in a code comment
+### Stage 2 — Coding
 
-**Examples of things that MUST be verified:**
-- Install URLs (e.g., `get.openclaw.ai` was assumed but doesn't exist — OpenClaw uses `npm install -g openclaw@latest`)
-- CLI flags and subcommands (don't assume `--flag` exists without checking `--help`)
-- API base URLs and paths
-- Package registry names and slugs
-- GitHub repo URLs and branch names
+- Implement changes against live codebase
+- Commit to working branch with descriptive messages
+- Ensure code compiles/parses clean (no syntax errors)
+- Follow existing code style and patterns
 
-**If in doubt, run the command or fetch the URL in a test before committing.**
+### Stage 3 — Dependency Check
 
-> **Lesson (BUG-014, 2026-03-12):** We shipped `curl -fsSL https://get.openclaw.ai | bash` in the installer assuming OpenClaw had a curl-pipe-bash installer. They don't — OpenClaw installs via npm. The broken URL shipped to 30 repos before a user reported it. Always verify first.
+- **Detect new dependencies** in all changed files:
+  - Check `package.json` for new runtime dependencies
+  - Check `package.json` for new peer dependencies
+  - Check skill subdirectories (`skills/*/package.json`) for skill-specific deps
+  - Check for new system-level deps (e.g., `ollama`, external binaries)
+- **Update EverClaw installer** (`scripts/install.sh`) if new deps found:
+  - Add `npm install` calls for skill-specific deps (auto-discovered via `find . -name package.json`)
+  - Add system-level dependency checks/installers
+  - Test installer on clean environment (Docker container or fresh VM)
+- **Verify installer covers all deps** before proceeding to audit
+- **Skip condition:** If no new dependencies added, mark as PASS and proceed
 
-#### Deliverable
-- Working code that implements the approved design
-- Updated CHANGELOG.md
-- Updated version in package.json or equivalent
-- Confirmation that all external URLs/commands have been verified
-- Summary of changes for David's review
+### Stage 4 — Audit
 
-#### Gate
-**David must review the coded changes before proceeding to Stage 3.**
+- **Executed by the Code Audit agent** (`code-audit`, Claude Opus 4.6)
+- Bernardo (main agent) sends patches via `sessions_send` to the audit agent
+- Audit agent reviews against live repo code and sends findings back
+- **Loop until all changes rated Excellent** — automated back-and-forth
+- **Check for:**
+  - Correctness (does the fix actually resolve the issue?)
+  - Variable name accuracy (match live code, not pseudocode)
+  - Security implications and new attack surfaces
+  - Edge cases and regressions
+  - Logic errors, off-by-one, type mismatches
+- **Rate each change:** Excellent / Good / Acceptable / Flawed / Broken
+- **Iterate patches** until all changes rated **Excellent**
+- Document audit findings in `memory/projects/everclaw/audit-*.md`
+- David can also trigger audits directly via Signal (group TBD)
 
----
+### Stage 5 — Testing
 
-### Stage 3: Testing
+- Run all unit tests (`npm test` or equivalent)
+- Run integration tests if applicable
+- Test edge cases identified during audit
+- Verify on target platforms (macOS, Linux, Docker)
+- All tests must pass before proceeding
 
-**Goal:** Verify the code works as intended and fix any errors.
+### Stage 6 — PII Scan
 
-#### Steps
-1. Run functional tests for new features
-2. Run regression tests for existing functionality
-3. Test edge cases and error handling
-4. **Verify all external URLs resolve** (HTTP 200) and external commands execute as expected
-5. Verify backward compatibility
-6. Fix any bugs discovered during testing
-7. Document test results
+- Scan all changed files for:
+  - Private keys, wallet addresses, API keys
+  - Personal data (names, emails, phone numbers)
+  - Hardcoded secrets or credentials
+- Use automated PII Guard + manual review
+- **0 findings required** to proceed
 
-#### Deliverable
-- Test report showing:
-  - Tests performed
-  - Results (pass/fail)
-  - Bugs found and fixed
-  - Verification that intended functionality works
+### Stage 7 — Documentation
 
-#### Gate
-**Report test results to David before proceeding to Stage 4.**
+- **Update SKILL.md** with:
+  - New features, CLI commands, config options
+  - API changes or breaking changes
+  - Dependency requirements
+- **Update CHANGELOG.md** with:
+  - Version number and date
+  - Summary of changes (Added/Fixed/Changed/Security)
+  - Link to relevant issues/PRs
+- **Update README.md** if:
+  - Installation process changed
+  - New commands or workflows added
+  - Prerequisites changed
+- **Update architecture docs** (`memory/projects/everclaw/*.md`) if:
+  - New modules or components
+  - Data flow or process changes
+  - Integration changes
+- **Review** all doc changes for accuracy
+- **Skip condition:** If no user-facing changes, mark as PASS and proceed
 
----
+### Stage 8 — Primary Deploy
 
-### Stage 4: PII Scan
+- Push to `profbernardoj/everclaw` (origin)
+- Push to `EverClaw/EverClaw` (org remote)
+- Verify both repos match
 
-**Goal:** Ensure no personal identifiable information is included in deployed code.
+### Stage 9 — Ecosystem Deploy
 
-#### Steps
-1. Scan for email addresses (exclude example.com, noreply, etc.)
-2. Scan for API keys, secrets, tokens, passwords
-3. Scan for private keys
-4. Scan for phone numbers
-5. Scan for real names (exclude public usernames)
-6. Scan for local file paths with usernames
-7. Scan for wallet addresses (verify only public contracts)
-8. Remove or exclude any PII found
-9. Stage only clean files for commit
+- Run `bash scripts/ecosystem-sync.sh`
+- Syncs to all 28+ flavor repos
+- Verify all repos updated (check sync output)
 
-#### Deliverable
-- PII scan report showing:
-  - Categories checked
-  - Findings (or "clean")
-  - Any files excluded from commit
+### Stage 10 — Package Tag & Docker
 
-#### Gate
-**Report PII scan results to David before proceeding to Stage 5.**
-
----
-
-### Stage 5: Primary Deployment
-
-**Goal:** Deploy to the primary EverClaw/EverClaw repository.
-
-#### Steps
-1. Commit with descriptive message following conventional commits:
-   - `feat:` for new features
-   - `fix:` for bug fixes
-   - `chore:` for maintenance
-   - `docs:` for documentation
-2. Verify commit includes all intended changes
-3. Push to `EverClaw/EverClaw` (everclaw-org remote)
-4. Create and push version tag (e.g., `v2026.3.8`)
-5. Verify deployment via `git ls-remote`
-
-#### Deliverable
-- Deployment confirmation with:
-  - Commit hash
-  - Tag version
-  - Remote verification (commit hash match)
-  - Files changed count
-
-#### Gate
-**Report deployment to David before proceeding to Stage 6.**
-
----
-
-### Stage 6: Ecosystem Deployment
-
-**Goal:** Deploy to all related repositories sequentially with verification.
-
-#### Steps
-1. List all repositories to update (flavor repos, forks, etc.)
-2. Deploy to each repository one at a time:
-   - Push main branch with `--force-with-lease`
-   - Verify commit hash matches primary
-   - Record success/failure
-3. Push tags to all repositories
-4. Verify tag deployment
-5. Generate final deployment report
-
-#### Repositories (as of 2026-03-08)
-
-| Repository | Remote Name |
-|------------|-------------|
-| EverClaw/EverClaw (org) | everclaw-org |
-| profbernardoj/everclaw | origin |
-| 28 flavor repos | Various |
-
-#### Deliverable
-- Final report with:
-  - Total repos deployed
-  - Each repo status (✅/❌)
-  - Commit hash verification
-  - Tag verification
-
-#### Gate
-**Final report to David confirming all deployments complete.**
+- Bump version in: `package.json`, `SKILL.md`, `Dockerfile`, `docker-compose.yml`
+- Update `CHANGELOG.md` with release notes
+- Create git tag: `git tag -a vYYYY.M.DD -m "release message"`
+- Push tag: `git push origin main --tags`
+- Docker image builds via GitHub Actions workflow
+- Verify image: `ghcr.io/everclaw/everclaw:<version>` + `:latest`
+- Optionally publish to ClawHub: `clawhub publish`
 
 ---
 
-### Stage 7: Package Tag & Docker Image
+## Agent Assignments
 
-**Goal:** Create a versioned release tag on EverClaw/EverClaw and trigger Docker image build via GitHub Actions.
+| Stage | Agent ID | Agent Name | Model | Signal Group ID |
+|-------|----------|------------|-------|-----------------|
+| 0. Research | `researcher` | Researcher | claude-opus-4-6 | `3BhhUIY7YhoUaljmxbACxUtUkf+7+krTxLu5PtCR5ok=` |
+| 1. Planning | `arch-design` | Architecture & Design | claude-opus-4-6 | `azKAGmzMO2idaoDC18t9WNd7sRyV9vsLW5Ws0P5tx3c=` |
+| 2. Coding | `coder` | Coder | claude-opus-4-6 | `Pc0giAwEpUyRhKWZpHEl7uHaHpIDPfaUDOUdN3QtVGE=` |
+| 3. Dependency Check | `coder` | Coder | claude-opus-4-6 | `Pc0giAwEpUyRhKWZpHEl7uHaHpIDPfaUDOUdN3QtVGE=` |
+| 4. Audit | `code-audit` | Code Audit | claude-opus-4-6 | `nqQowO5pGMZCLGov73OxNf85tx5aQ14NesPcFUyhZGA=` |
+| 5. Testing | `tester` | Tester | claude-opus-4-6 | `vZyh9z/JFn/ve+CF8YXuuynB5UA1CPKwFBV/NQ1MSPs=` |
+| 6. PII Scan | `pii-checker` | PII Checker | claude-opus-4-6 | `69tGhtpP/fWP3QJJcAaaRBMogMvMI624dRMyJ7kYd/U=` |
+| 7. Documentation | `coder` | Coder | claude-opus-4-6 | `Pc0giAwEpUyRhKWZpHEl7uHaHpIDPfaUDOUdN3QtVGE=` |
+| 8-10. Deploy | `deployer` | Deployer | claude-opus-4-6 | `DDzMXAM/OG9g+GJ5rAg63YOQp24N34js2etji1GcdKo=` |
 
-#### Steps
-1. Bump version in: `package.json`, `SKILL.md`, `Dockerfile` (EVERCLAW_VERSION), `docker-compose.yml`
-2. Commit version bump: `git commit -m "release: vYYYY.M.DD — <summary>"`
-3. Create annotated tag: `git tag -a vYYYY.M.DD -m "<summary>"`
-4. Push to upstream with tags: `git push upstream main --tags`
-5. Verify `.github/workflows/docker-build.yml` has correct `OPENCLAW_VERSION` build arg
-   - If not: update via GitHub API (`.github` is gitignored locally)
-6. Monitor GitHub Actions build: `gh run list --repo EverClaw/EverClaw --limit 3`
-7. Verify Docker image published: `gh api orgs/EverClaw/packages/container/everclaw/versions --jq '.[0]'`
-8. Update `MEMORY.md` with new version and Docker image status
+### Agent Workspaces
 
-#### Docker Workflow Details
-- Workflow: `.github/workflows/docker-build.yml`
-- Triggers: push to `main`, push of `v*` tags, manual `workflow_dispatch`
-- Registry: `ghcr.io/everclaw/everclaw`
-- Tags: `latest` + version from `package.json` (on main push), git tag (on tag push)
-- Platforms: `linux/amd64`, `linux/arm64`
-- Build args: `EVERCLAW_VERSION` (from package.json), `OPENCLAW_VERSION` (hardcoded in workflow)
+| Agent | Workspace | Agent Dir |
+|-------|-----------|-----------|
+| researcher | `~/.openclaw/workspace-researcher/` | `~/.openclaw/agents/researcher/agent/` |
+| arch-design | `~/.openclaw/workspace-arch-design/` | `~/.openclaw/agents/arch-design/agent/` |
+| coder | `~/.openclaw/workspace-coder/` | `~/.openclaw/agents/coder/agent/` |
+| code-audit | `~/.openclaw/workspace-code-audit/` | `~/.openclaw/agents/code-audit/agent/` |
+| tester | `~/.openclaw/workspace-tester/` | `~/.openclaw/agents/tester/agent/` |
+| pii-checker | `~/.openclaw/workspace-pii-checker/` | `~/.openclaw/agents/pii-checker/agent/` |
+| deployer | `~/.openclaw/workspace-deployer/` | `~/.openclaw/agents/deployer/agent/` |
 
-#### Deliverable
-- Version tag visible on GitHub releases
-- Docker image at `ghcr.io/everclaw/everclaw:<version>` and `:latest`
-- GitHub Actions run ID and status
+### Inter-Agent Communication
 
-#### Gate
-**Verify Docker image is pullable before reporting complete to David.**
+- **Primary:** `sessions_send` (internal, low-latency)
+- **Secondary:** Signal groups (external, human-visible)
+- **Future:** XMTP transport layer (decentralized, Phase 2)
+
+### Pipeline Flow
+
+```
+David / Bernardo (main)
+        │
+        ▼
+  ┌─────────────┐
+  │  researcher  │  Stage 0: Research
+  │ (Researcher) │  → Produces research brief
+  └──────┬──────┘
+         │ brief approved
+         ▼
+  ┌─────────────┐
+  │ arch-design  │  Stage 1: Planning
+  │  (Architect) │  → Produces specs
+  └──────┬──────┘
+         │ spec
+         ▼
+  ┌─────────────┐
+  │    coder     │  Stage 2: Coding
+  │   (Coder)   │  → Implements spec
+  └──────┬──────┘
+         │ code
+         ▼
+  ┌─────────────┐
+  │    coder     │  Stage 3: Dependency Check
+  │   (Coder)   │  → Detect new deps, update installer
+  └──────┬──────┘
+         │ installer covers deps
+         ▼
+  ┌─────────────┐
+  │ code-audit   │  Stage 4: Audit
+  │  (Auditor)  │  → Reviews line-by-line
+  └──────┬──────┘  → Loop with coder until Excellent
+         │ approved
+         ▼
+  ┌─────────────┐
+  │   tester     │  Stage 5: Testing
+  │  (Tester)   │  → Unit/integration/edge tests
+  └──────┬──────┘
+         │ all pass
+         ▼
+  ┌─────────────┐
+  │ pii-checker  │  Stage 6: PII Scan
+  │ (PII Guard) │  → Zero tolerance scan
+  └──────┬──────┘
+         │ PASS
+         ▼
+  ┌─────────────┐
+  │    coder     │  Stage 7: Documentation
+  │   (Coder)   │  → Update SKILL.md, CHANGELOG, README
+  └──────┬──────┘
+         │ docs reviewed
+         ▼
+  ┌─────────────┐
+  │  deployer    │  Stages 8-10: Deploy
+  │ (Deployer)  │  → Primary → Ecosystem → Tag & Docker
+  └─────────────┘
+```
 
 ---
 
-### Quick Reference
+## Quick Reference
 
-| Stage | Name | Gate |
-|-------|------|------|
-| 1 | Planning & Design | David approves design |
-| 2 | Coding | David reviews code |
-| 3 | Testing | Report results to David |
-| 4 | PII Scan | Report clean scan to David |
-| 5 | Primary Deploy | Report to David |
-| 6 | Ecosystem Deploy | Final report to David |
-| 7 | Package Tag & Docker | Verify image pullable |
+```
+0. Research → 1. Plan → 2. Code → 3. Deps → 4. Audit → 5. Test → 6. PII → 7. Docs → 8. Deploy → 9. Ecosystem → 10. Tag & Docker
+```
 
----
+## History
 
-### Example: PromptGuard v3.3.0 Upgrade
-
-**Date:** 2026-03-08
-
-| Stage | Duration | Result |
-|-------|----------|--------|
-| 1. Planning | 5 min | Approved design for v3.3.0 sync |
-| 2. Coding | 20 min | 37 files changed, +8591/-2136 |
-| 3. Testing | 10 min | All 7 test categories passed |
-| 4. PII Scan | 5 min | Clean (plist excluded) |
-| 5. Primary Deploy | 2 min | f2429e3 → EverClaw/EverClaw |
-| 6. Ecosystem | 5 min | 29 repos deployed, all verified |
-
-**Total time:** ~47 minutes
-
----
-
-### Notes
-
-- Never skip stages or gates
-- Document everything in memory files (`memory/daily/YYYY-MM-DD.md`)
-- Update this SOP as process improves
-- Reference SOP-001 when David assigns coding tasks
+- **Mar 9, 2026** — SOP-001 created (Stages 1–6)
+- **Mar 14, 2026** — Stage 7 added (Package Tag & Docker)
+- **Mar 15, 2026** — Stage 3 (Audit) added between Coding and Testing; stages renumbered
+- **Mar 15, 2026** — 6 dedicated agents created and bound to Signal groups for full pipeline automation
+- **Mar 16, 2026** — Stage 0 (Research) added before Planning; `researcher` agent created with Signal group binding. Total pipeline agents: 7
+- **Mar 17, 2026** — Stage 3 (Dependency Check) added between Coding and Audit; stages renumbered 4-9. Known issue: agent-chat v0.1.0 deps were missed by installer (fixed in v0.2.0)
+- **Mar 17, 2026** — Stage 7 (Documentation) added between PII Scan and Deploy; stages renumbered 8-10. Ensures docs stay in sync with code changes.
 
 ---
 
