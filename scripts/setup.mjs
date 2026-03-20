@@ -211,17 +211,31 @@ function mergeConfig(existing, template) {
   }
 
   // === STREAMING COMPATIBILITY (v2026.3.20+) ===
-  // Enable streaming on all model definitions. Without streaming, OpenClaw waits
-  // for the complete response before any data arrives. With Morpheus P2P provider
-  // discovery taking 30-120s, non-streaming requests often hit timeout before the
-  // first token arrives. Streaming keeps the connection alive once tokens start flowing.
+  // Enable streaming on all model definitions via agents.defaults.models.<id>.streaming.
+  // OpenClaw's provider model schema (models.providers.*.models.*) does NOT accept "streaming"
+  // — it's strict (additionalProperties: false). Streaming must be set at the agent model
+  // override level: agents.defaults.models["provider/model-id"].streaming = true.
+  // Without streaming, OpenClaw waits for the complete response. With Morpheus P2P provider
+  // discovery taking 30-120s, non-streaming requests timeout before the first token arrives.
   if (merged.models?.providers) {
+    if (!merged.agents) merged.agents = {};
+    if (!merged.agents.defaults) merged.agents.defaults = {};
+    if (!merged.agents.defaults.models) merged.agents.defaults.models = {};
     let streamingFixed = 0;
     for (const [provName, prov] of Object.entries(merged.models.providers)) {
       if (Array.isArray(prov.models)) {
         for (const m of prov.models) {
-          if (m.streaming !== true) {
-            m.streaming = true;
+          const fullId = `${provName}/${m.id}`;
+          // Remove any stale streaming key from provider model definition (invalid location)
+          if ('streaming' in m) {
+            delete m.streaming;
+          }
+          // Set streaming at the correct location: agents.defaults.models
+          if (!merged.agents.defaults.models[fullId]) {
+            merged.agents.defaults.models[fullId] = {};
+          }
+          if (merged.agents.defaults.models[fullId].streaming !== true) {
+            merged.agents.defaults.models[fullId].streaming = true;
             streamingFixed++;
           }
         }

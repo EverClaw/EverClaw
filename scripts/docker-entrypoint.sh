@@ -306,14 +306,24 @@ if jq . "$CONFIG_FILE" > /dev/null 2>&1; then
   TMP_CONFIG=$(mktemp)
 
   if jq '
-    # Enable streaming on all model definitions
+    # Remove any stale "streaming" from provider model definitions (invalid location)
     if .models.providers then
       .models.providers |= with_entries(
         .value.models = (
           if (.value.models | type) == "array" then
-            [.value.models[] | .streaming = true]
+            [.value.models[] | del(.streaming)]
           else .value.models end
         )
+      )
+    else . end |
+    # Enable streaming at the correct location: agents.defaults.models.<provider/id>
+    if .models.providers then
+      reduce (
+        .models.providers | to_entries[] |
+        select(.value.models | type == "array") |
+        .key as $prov | .value.models[] | "\($prov)/\(.id)"
+      ) as $mid (.;
+        .agents.defaults.models[$mid].streaming = true
       )
     else . end |
     # Enforce minimum timeout for Morpheus Gateway

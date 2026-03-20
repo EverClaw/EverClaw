@@ -32,7 +32,6 @@
             "id": "glm-5",
             "name": "GLM-5 (via Morpheus Gateway)",
             "reasoning": false,
-            "streaming": true,
             "input": [
               "text"
             ],
@@ -49,7 +48,6 @@
             "id": "kimi-k2.5",
             "name": "Kimi K2.5 (via Morpheus Gateway)",
             "reasoning": false,
-            "streaming": true,
             "input": [
               "text"
             ],
@@ -66,7 +64,6 @@
             "id": "glm-4.7-flash",
             "name": "GLM 4.7 Flash (via Morpheus Gateway)",
             "reasoning": false,
-            "streaming": true,
             "input": [
               "text"
             ],
@@ -91,7 +88,6 @@
             "_note": "Auto-selected by setup-ollama.sh based on your hardware. Replace with your actual model.",
             "name": "Qwen3.5 9B (Local Ollama)",
             "reasoning": false,
-            "streaming": true,
             "input": [
               "text"
             ],
@@ -115,7 +111,6 @@
             "id": "glm-5",
             "name": "GLM-5 (via Morpheus P2P)",
             "reasoning": false,
-            "streaming": true,
             "input": [
               "text"
             ],
@@ -132,7 +127,6 @@
             "id": "kimi-k2.5",
             "name": "Kimi K2.5 (via Morpheus P2P)",
             "reasoning": false,
-            "streaming": true,
             "input": [
               "text"
             ],
@@ -149,7 +143,6 @@
             "id": "glm-4.7-flash",
             "name": "GLM 4.7 Flash (via Morpheus P2P)",
             "reasoning": false,
-            "streaming": true,
             "input": [
               "text"
             ],
@@ -166,7 +159,6 @@
             "id": "kimi-k2-thinking",
             "name": "Kimi K2 Thinking (via Morpheus P2P)",
             "reasoning": false,
-            "streaming": true,
             "input": [
               "text"
             ],
@@ -196,6 +188,32 @@
           "morpheus/kimi-k2.5",
           "ollama/qwen3.5:9b"
         ]
+      },
+      "models": {
+        "mor-gateway/glm-5": {
+          "streaming": true
+        },
+        "mor-gateway/kimi-k2.5": {
+          "streaming": true
+        },
+        "mor-gateway/glm-4.7-flash": {
+          "streaming": true
+        },
+        "ollama/qwen3.5:9b": {
+          "streaming": true
+        },
+        "morpheus/glm-5": {
+          "streaming": true
+        },
+        "morpheus/kimi-k2.5": {
+          "streaming": true
+        },
+        "morpheus/glm-4.7-flash": {
+          "streaming": true
+        },
+        "morpheus/kimi-k2-thinking": {
+          "streaming": true
+        }
       }
     }
   }
