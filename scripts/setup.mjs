@@ -196,6 +196,20 @@ function mergeConfig(existing, template) {
     merged.agents.defaults.model.fallbacks = curFallbacks;
   }
 
+  // === MORPHEUS GATEWAY TIMEOUT COMPATIBILITY (v2026.3.20+) ===
+  // Morpheus Gateway models (GLM-5, gpt-oss-120b) can take 30-120s on first
+  // request due to P2P provider discovery. Enforce minimum timeout so
+  // gateway-only users don't hit "LLM request timed out" on every first message.
+  if (!merged.agents) merged.agents = {};
+  if (!merged.agents.defaults) merged.agents.defaults = {};
+  const currentTimeout = merged.agents.defaults.timeoutSeconds || 0;
+  if (currentTimeout < 180) {
+    merged.agents.defaults.timeoutSeconds = 300;
+    console.log(`  ✅ Set timeoutSeconds=300 (was ${currentTimeout || 'unset'}) — required for Morpheus Gateway P2P discovery`);
+  } else if (currentTimeout !== 300) {
+    console.log(`  ℹ️  timeoutSeconds already ${currentTimeout}s (user value preserved)`);
+  }
+
   return merged;
 }
 
@@ -428,6 +442,7 @@ if (applyMode) {
   backupBeforeWrite(configPath);
   writeFileSync(configPath, JSON.stringify(merged, null, 2) + '\n');
   console.log(`\n  ✅ Config written to ${configPath}`);
+  console.log('  ⚠️  First GLM-5 or gpt-oss-120b message may take 30-120s due to Morpheus Gateway warm-up. This is normal.');
 
   // ─── Stage 3: Auth Profiles ────────────────────────────────────
 

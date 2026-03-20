@@ -14,12 +14,13 @@ Real-time XMTP messaging for EverClaw agents. E2E-encrypted, always-on, daemon-b
 
 - Node.js >= 20.0.0
 - EverClaw installed
-- `xmtp-comms-guard` skill (peer dependency)
+- `xmtp-comms-guard` ^6.0.0 (peer dependency)
 
 ## Setup
 
+### 1. Generate XMTP Identity (one-time)
+
 ```bash
-# Generate XMTP identity (one-time)
 node skills/agent-chat/setup-identity.mjs
 ```
 
@@ -27,112 +28,101 @@ This creates:
 - `~/.everclaw/xmtp/.secrets.json` — private key + DB encryption key (chmod 600)
 - `~/.everclaw/xmtp/identity.json` — public address + metadata
 
-## Running
-
-### Automatic Setup (recommended)
-
-The daemon runs as a user-level service (no sudo required):
+### 2. Install Daemon
 
 ```bash
-# Auto-detect OS and install
+# Install as system service (auto-starts on boot)
 bash scripts/setup-agent-chat.sh
 ```
 
-**What this does:**
-- Detects macOS or Linux
-- Installs launchd plist or systemd user service
-- Substitutes paths (handles nvm/brew/Node path variations)
-- Sets proper permissions on `~/.everclaw/xmtp/`
-- Starts the daemon immediately
+The daemon runs in the background via launchd (macOS) or systemd (Linux).
 
-### Commands
+### 3. Verify
 
 ```bash
-bash scripts/setup-agent-chat.sh --status    # Check if running
-bash scripts/setup-agent-chat.sh --logs      # Tail logs
-bash scripts/setup-agent-chat.sh --restart   # Restart daemon
-bash scripts/setup-agent-chat.sh --uninstall # Remove service
+# Check daemon status
+bash scripts/setup-agent-chat.sh --status
+
+# Check XMTP identity
+node skills/agent-chat/cli.mjs status
 ```
 
-### Foreground (testing)
-```bash
-node skills/agent-chat/daemon.mjs
-```
-
-### Manual Control
-
-**macOS (launchd):**
-```bash
-launchctl list | grep everclaw                        # Status
-launchctl bootout gui/$(id -u)/com.everclaw.agent-chat  # Stop
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.everclaw.agent-chat.plist  # Start
-tail -f ~/.everclaw/logs/agent-chat.log               # Logs
-```
-
-**Linux (systemd):**
-```bash
-systemctl --user status everclaw-agent-chat    # Status
-systemctl --user stop everclaw-agent-chat       # Stop
-systemctl --user start everclaw-agent-chat      # Start
-journalctl --user -u everclaw-agent-chat -f     # Logs
-```
-
-## CLI
+## Daemon Commands
 
 ```bash
-agent-chat status    # Identity info (address, inboxId)
-agent-chat health    # Daemon health (running/stopped, messages processed)
-agent-chat groups    # List group conversation mappings
-agent-chat setup     # Generate identity (same as setup-identity.mjs)
+bash scripts/setup-agent-chat.sh              # Install and start
+bash scripts/setup-agent-chat.sh --status     # Check status
+bash scripts/setup-agent-chat.sh --logs       # View logs
+bash scripts/setup-agent-chat.sh --restart    # Restart daemon
+bash scripts/setup-agent-chat.sh --uninstall  # Remove service
 ```
 
-## Sending Messages (from OpenClaw)
+## CLI Reference
 
-Write a JSON file to `~/.everclaw/xmtp/outbox/`:
-
-```json
-{
-  "peerAddress": "0x...",
-  "v6Payload": {
-    "messageType": "COMMAND",
-    "version": "6.0",
-    "payload": { "command": "ping" },
-    "topics": ["everclaw"],
-    "sensitivity": "public",
-    "intent": "query",
-    "correlationId": "uuid-here",
-    "timestamp": "2026-03-17T00:00:00.000Z",
-    "nonce": "base64-nonce-here"
-  }
-}
+```bash
+node skills/agent-chat/cli.mjs status         # Identity info
+node skills/agent-chat/cli.mjs health         # Daemon health
+node skills/agent-chat/cli.mjs groups         # List groups
+node skills/agent-chat/cli.mjs setup          # Generate identity
+node skills/agent-chat/cli.mjs trust-peer     # Trust a peer
+node skills/agent-chat/cli.mjs peers list     # List peers
+node skills/agent-chat/cli.mjs send           # Send message
 ```
 
-The bridge picks it up, sends via XMTP, and deletes the file.
+### Trusting Peers
 
-## Receiving Messages
+Before sending messages, trust the recipient's address:
 
-Inbound DATA messages are written to `~/.everclaw/xmtp/inbox/{correlationId}.json`. OpenClaw skills can watch this directory or poll for new files.
+```bash
+node skills/agent-chat/cli.mjs trust-peer 0xABC123... --as colleague --name "Partner Agent"
+```
 
-## Consent Policies
+Relationship levels:
+- `unknown` — No context, messages logged only
+- `stranger` — Met once, can exchange messages
+- `colleague` — Work relationship, commands allowed
+- `friend` — Personal trust, broader access
+- `family` — Full trust
 
-| Policy | Behavior |
-|--------|----------|
-| `open` | Accept all messages (for canonical/project agents) |
-| `handshake` | New peers trigger V6 handshake flow (default for user agents) |
-| `strict` | Drop all unknown peers |
+### Sending Messages
 
-Configure in `config/default.json` under `xmtp.consentPolicy`.
+```bash
+node skills/agent-chat/cli.mjs send 0xABC123... "Hello from EverClaw!"
+```
+
+Messages are queued in `~/.everclaw/xmtp/outbox/` and processed by the daemon.
+
+## Architecture
+
+- **Process model**: Separate always-on daemon (not in-process with OpenClaw)
+- **IPC**: Filesystem bridge (`~/.everclaw/xmtp/`)
+- **Message format**: V6 JSON inside XMTP text content type
+- **Consent**: Configurable per-agent (`open`/`handshake`/`strict`)
+- **Middleware**: Consent → CommsGuard V6 → Router
+
+## Platform Support
+
+| Platform | Service Manager | Logs |
+|----------|----------------|------|
+| macOS | launchd | `~/.everclaw/logs/agent-chat.*` |
+| Linux | systemd (user) | `journalctl --user -u everclaw-agent-chat` |
+
+No sudo required — everything runs as your user.
+
+## Security
+
+- Keys: `~/.everclaw/xmtp/.secrets.json` (chmod 600)
+- Directory: `~/.everclaw/xmtp/` (chmod 700)
+- Path traversal protection
+- CommsGuard V6 validation on all structured messages
 
 ## Testing
 
 ```bash
 cd skills/agent-chat
-npm test  # 36 tests, ~110ms
+npm install
+npm test  # 36 tests
 ```
-
-## Architecture
-
-See [SKILL.md](SKILL.md) for full architecture details.
 
 ## License
 

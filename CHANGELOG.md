@@ -2,6 +2,15 @@
 
 All notable changes to EverClaw are documented here.
 
+## [2026.3.20.1442] - 2026-03-20
+
+### Fixed
+- **"LLM request timed out" on container/gateway-only installs** — Morpheus Gateway models (GLM-5, gpt-oss-120b) can take 30-120s on first request due to P2P provider discovery. OpenClaw's default timeout was too low, causing immediate timeout errors for gateway-only users. Fix:
+  - All 3 config templates now set `agents.defaults.timeoutSeconds: 300` (5 min)
+  - `setup.mjs` auto-enforces minimum 180s timeout during config merge (upgrades low values, preserves user values ≥180s)
+  - `diagnose.sh` new check A8: flags `timeoutSeconds < 180` as FAIL with fix instructions
+  - Agent boot template (`AGENTS.template.md`) now instructs agents to send a brief acknowledgment ("On it!", "Working on that...") on first message so users aren't left staring at a blank screen
+
 ## [2026.3.31] - 2026-03-19
 
 ### Fixed

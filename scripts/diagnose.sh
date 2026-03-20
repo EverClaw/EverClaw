@@ -252,6 +252,24 @@ else:
     fail "$prim_detail"
     fix "Check provider name or add it to models.providers in openclaw.json"
   fi
+
+  # A8: Is timeoutSeconds high enough for Morpheus Gateway?
+  local timeout_check
+  timeout_check=$(python3 -c "
+import json
+c = json.load(open('$OPENCLAW_CONFIG'))
+ts = c.get('agents',{}).get('defaults',{}).get('timeoutSeconds', 0)
+print(ts)
+" 2>/dev/null || echo "0")
+
+  if [[ "$timeout_check" -lt 180 ]]; then
+    fail "timeoutSeconds=${timeout_check}s is too low for Morpheus Gateway models"
+    fix "GLM-5/gpt-oss-120b need 30-120s for P2P discovery on first request"
+    fix "Run: node scripts/setup.mjs --apply (auto-sets 300s)"
+    fix "Or manually set agents.defaults.timeoutSeconds to 300 in openclaw.json"
+  else
+    pass "timeoutSeconds=${timeout_check}s (sufficient for Morpheus Gateway)"
+  fi
 }
 
 # ═════════════════════════════════════════════════════════════════════════════

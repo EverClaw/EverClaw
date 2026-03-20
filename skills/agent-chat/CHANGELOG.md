@@ -1,26 +1,30 @@
 # Changelog
 
-## v0.2.0 (2026-03-20)
+## v0.2.1 (2026-03-20)
 
-Daemon management improvements — zero-sudo setup.
+Daemon auto-start and management improvements.
 
 ### Added
-- `scripts/setup-agent-chat.sh` — automated daemon setup for macOS and Linux
-- User-level systemd service (no sudo required)
-- Modern `launchctl bootstrap/bootout` for macOS
-- Proper log paths (`~/.everclaw/logs/agent-chat.*`)
-- Automatic XMTP directory permissions (700) and key file permissions (600)
-- Integration with `install-proxy.sh` for one-command setup
-- Idempotent setup (safe to re-run)
+- `setup-agent-chat.sh` script for daemon installation and management
+- macOS launchd support with modern `launchctl bootstrap/bootout` API
+- Linux systemd user-level support (no sudo required)
+- `--status`, `--logs`, `--restart`, `--uninstall`, `--skip-start` CLI commands
+- Automatic Node.js path detection (nvm/brew/system)
+- Pre-flight checks for Node >= 20 and XMTP identity
+- Secure permissions enforcement (chmod 700/600)
+- Log output to `~/.everclaw/logs/agent-chat.*`
+- Health verification after daemon start
 
 ### Changed
-- Updated launchd plist template with proper log paths
-- Updated systemd template for user-level service (`default.target`)
-- Templates now use `{{EVERCLAW_PATH}}` for log paths
+- Updated SKILL.md with full daemon management documentation
+- Updated README.md with quick start and troubleshooting
+- Templates now use `{{LOG_DIR}}` placeholder for log paths
+- Linux template changed to user-level systemd (`~/.config/systemd/user/`)
 
-### Fixed
-- No more sudo prompts during curl installer
-- Correct nvm/brew/Node path detection in setup script
+### Security
+- Explicit `chmod 700 ~/.everclaw/xmtp` on install
+- Explicit `chmod 600 ~/.everclaw/xmtp/.secrets.json` on install
+- No sudo required for Linux (user-level systemd)
 
 ## v0.1.0 (2026-03-17)
 
