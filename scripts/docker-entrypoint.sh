@@ -295,6 +295,45 @@ if jq . "$CONFIG_FILE" > /dev/null 2>&1; then
   fi
 fi
 
+# ─── Config Compatibility: Streaming + Timeout ───────────────────────────────
+# Ensure all model definitions have streaming=true and timeout is sufficient.
+# Without streaming, OpenClaw waits for the complete response — Morpheus P2P
+# provider discovery (30-120s) causes timeout before first token arrives.
+# Since v2026.3.20.1625.
+
+if jq . "$CONFIG_FILE" > /dev/null 2>&1; then
+  COMPAT_CHANGES=false
+  TMP_CONFIG=$(mktemp)
+
+  if jq '
+    # Enable streaming on all model definitions
+    if .models.providers then
+      .models.providers |= with_entries(
+        .value.models = (
+          if (.value.models | type) == "array" then
+            [.value.models[] | .streaming = true]
+          else .value.models end
+        )
+      )
+    else . end |
+    # Enforce minimum timeout for Morpheus Gateway
+    if (.agents.defaults.timeoutSeconds // 0) < 180 then
+      .agents.defaults.timeoutSeconds = 300
+    else . end
+  ' "$CONFIG_FILE" > "$TMP_CONFIG" 2>/dev/null; then
+    # Check if anything actually changed
+    if ! diff -q "$CONFIG_FILE" "$TMP_CONFIG" > /dev/null 2>&1; then
+      mv "$TMP_CONFIG" "$CONFIG_FILE"
+      echo "🔧 Auto-configured: streaming + timeout for Morpheus compatibility"
+      COMPAT_CHANGES=true
+    else
+      rm -f "$TMP_CONFIG"
+    fi
+  else
+    rm -f "$TMP_CONFIG"
+  fi
+fi
+
 # ─── Start Morpheus Proxy (background) ──────────────────────────────────────
 
 # Trap signals to clean up all children on exit

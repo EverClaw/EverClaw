@@ -60,8 +60,11 @@ jobs:
             # On push to main: tag as "latest" and version from package.json
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
             type=raw,value=${{ steps.version.outputs.VERSION }},enable=${{ github.ref == 'refs/heads/main' }}
-            # On tag push: use the git tag (e.g., v2026.2.23)
-            type=semver,pattern={{raw}}
+            # On tag push: tag as "latest", version from package.json, and the git tag
+            # (type=semver can't parse our 4-part YYYY.M.DD.HHMM format, so use type=match)
+            type=match,pattern=v(.*),group=1,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+            type=raw,value=${{ steps.version.outputs.VERSION }},enable=${{ startsWith(github.ref, 'refs/tags/v') }}
             # PR builds: tag with PR number (not pushed)
             type=ref,event=pr
 
@@ -77,7 +80,7 @@ jobs:
             OPENCLAW_VERSION=${{ steps.openclaw_version.outputs.OPENCLAW_VERSION }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          no-cache-filter: openclaw-builder
+          no-cache-filters: openclaw-builder
           platforms: linux/amd64,linux/arm64
 
       - name: Output image info
