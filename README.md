@@ -319,6 +319,25 @@ That's it. No external accounts. No API keys. No subscriptions.
 
 ---
 
+## Troubleshooting
+
+### "LLM request timed out" on first message
+
+Morpheus Gateway models (GLM-5, gpt-oss-120b) can take 30-120 seconds on the **first request** while the P2P network discovers providers. This is normal and subsequent requests will be fast.
+
+**Fix:** Ensure `agents.defaults.timeoutSeconds` is at least 300 in your `openclaw.json`:
+```json
+"agents": {
+  "defaults": {
+    "timeoutSeconds": 300
+  }
+}
+```
+
+Running `node scripts/setup.mjs --apply` sets this automatically. You can also run `bash scripts/diagnose.sh` to check.
+
+---
+
 ## Links
 
 - **Morpheus AI:** [mor.org](https://mor.org)

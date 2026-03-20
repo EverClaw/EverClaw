@@ -19,22 +19,85 @@ Always-on daemon providing E2E-encrypted messaging via XMTP's MLS protocol. Runs
 ## Quick Start
 
 ```bash
-# 1. Generate XMTP identity
+# 1. Generate XMTP identity (one-time)
 node skills/agent-chat/setup-identity.mjs
 
-# 2. Start daemon (foreground for testing)
-node skills/agent-chat/daemon.mjs
+# 2. Install daemon as system service
+bash scripts/setup-agent-chat.sh
 
 # 3. Check status
-node skills/agent-chat/cli.mjs status
+bash scripts/setup-agent-chat.sh --status
+```
+
+## Daemon Management
+
+The `setup-agent-chat.sh` script installs the XMTP daemon as a persistent system service.
+
+### Commands
+
+```bash
+# Install and start daemon (auto-detects OS)
+bash scripts/setup-agent-chat.sh
+
+# Check daemon status
+bash scripts/setup-agent-chat.sh --status
+
+# View recent logs
+bash scripts/setup-agent-chat.sh --logs
+
+# Restart daemon
+bash scripts/setup-agent-chat.sh --restart
+
+# Uninstall daemon
+bash scripts/setup-agent-chat.sh --uninstall
+
+# Install without starting
+bash scripts/setup-agent-chat.sh --skip-start
+```
+
+### Platform Support
+
+| Platform | Service Manager | Location | Logs |
+|----------|----------------|----------|------|
+| macOS | launchd | `~/Library/LaunchAgents/com.everclaw.agent-chat.plist` | `~/.everclaw/logs/agent-chat.*` |
+| Linux | systemd (user) | `~/.config/systemd/user/everclaw-agent-chat.service` | `journalctl --user -u everclaw-agent-chat` |
+
+**Note:** Linux uses user-level systemd (no sudo required). All services run as your user account.
+
+### Manual Commands
+
+**macOS (launchd):**
+```bash
+# Check if loaded
+launchctl list | grep everclaw
+
+# View logs
+tail -f ~/.everclaw/logs/agent-chat.log
+
+# Stop/start
+launchctl bootout gui/$(id -u)/com.everclaw.agent-chat
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.everclaw.agent-chat.plist
+```
+
+**Linux (systemd):**
+```bash
+# Check status
+systemctl --user status everclaw-agent-chat
+
+# View logs
+journalctl --user -u everclaw-agent-chat -f
+
+# Stop/start
+systemctl --user stop everclaw-agent-chat
+systemctl --user start everclaw-agent-chat
 ```
 
 ## Architecture
 
 - **Process model**: Separate always-on daemon (not in-process with OpenClaw)
-- **IPC**: Filesystem bridge (~/.everclaw/xmtp/outbox/ → inbox/)
+- **IPC**: Filesystem bridge (`~/.everclaw/xmtp/outbox/` → `inbox/`)
 - **Message format**: V6 JSON inside XMTP text content type
-- **Consent**: Configurable per-agent (open/handshake/strict)
+- **Consent**: Configurable per-agent (`open`/`handshake`/`strict`)
 - **Middleware chain**: Consent → CommsGuard V6 → Router
 
 ## Identity Model
@@ -45,12 +108,34 @@ Two-tier:
 
 XMTP wallet is messaging-only — no funds. Separate from MOR staking wallet.
 
+## CLI Reference
+
+```bash
+# Identity status
+node skills/agent-chat/cli.mjs status
+
+# Daemon health
+node skills/agent-chat/cli.mjs health
+
+# List peer groups
+node skills/agent-chat/cli.mjs groups
+
+# Trust a peer (allow messages)
+node skills/agent-chat/cli.mjs trust-peer 0x... --as colleague --name "Agent Name"
+
+# List trusted peers
+node skills/agent-chat/cli.mjs peers list
+
+# Send a message (via outbox)
+node skills/agent-chat/cli.mjs send 0x... "Hello, agent!"
+```
+
 ## Files
 
 | File | Purpose |
 |------|---------|
 | `daemon.mjs` | Entry point for launchd/systemd |
-| `cli.mjs` | CLI commands (status, health, groups, setup) |
+| `cli.mjs` | CLI commands |
 | `setup-identity.mjs` | One-time key generation |
 | `src/agent.mjs` | Agent creation + middleware wiring |
 | `src/identity.mjs` | Secret/identity loading |
@@ -153,6 +238,31 @@ This creates the messaging-only wallet in `~/.everclaw/xmtp/` (separate from you
 ## Security
 
 - Keys stored in `~/.everclaw/xmtp/.secrets.json` (chmod 600)
-- Path traversal protection on inbox writes (correlationId sanitized)
-- CommsGuard V6 validates all structured messages (schema, nonce, rate limit, PII)
+- Directory secured: `~/.everclaw/xmtp/` (chmod 700)
+- Path traversal protection on inbox writes
+- CommsGuard V6 validates all structured messages
 - Plain text messages bypass comms-guard (acceptable for agent-to-agent v1)
+
+## Troubleshooting
+
+### Daemon won't start
+
+1. Check Node.js version: `node --version` (need >= 20.0.0)
+2. Verify identity exists: `ls ~/.everclaw/xmtp/.secrets.json`
+3. Check logs: `bash scripts/setup-agent-chat.sh --logs`
+4. Reinstall: `bash scripts/setup-agent-chat.sh --uninstall && bash scripts/setup-agent-chat.sh`
+
+### Messages not sending
+
+1. Check peer is trusted: `node skills/agent-chat/cli.mjs peers list`
+2. Check daemon health: `node skills/agent-chat/cli.mjs health`
+3. Check outbox queue: `ls ~/.everclaw/xmtp/outbox/`
+4. Check daemon is running: `bash scripts/setup-agent-chat.sh --status`
+
+### XMTP installation limit
+
+XMTP limits the number of installations per identity. If you see warnings about installation limits:
+
+1. Check installations: `node skills/agent-chat/cli.mjs status`
+2. Revoke old installations via XMTP console (if available)
+3. Generate new identity: `node skills/agent-chat/setup-identity.mjs` (creates new address)

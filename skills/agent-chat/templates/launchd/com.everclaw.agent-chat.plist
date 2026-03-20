@@ -7,7 +7,7 @@
     <key>ProgramArguments</key>
     <array>
         <string>{{NODE_BIN}}</string>
-        <string>{{DAEMON_PATH}}</string>
+        <string>{{EVERCLAW_PATH}}/skills/agent-chat/daemon.mjs</string>
     </array>
     <key>RunAtLoad</key>
     <true/>
@@ -16,11 +16,11 @@
     <key>ThrottleInterval</key>
     <integer>10</integer>
     <key>StandardOutPath</key>
-    <string>{{EVERCLAW_PATH}}/logs/agent-chat.log</string>
+    <string>{{LOG_DIR}}/agent-chat.log</string>
     <key>StandardErrorPath</key>
-    <string>{{EVERCLAW_PATH}}/logs/agent-chat.err</string>
+    <string>{{LOG_DIR}}/agent-chat.err</string>
     <key>WorkingDirectory</key>
-    <string>{{EVERCLAW_PATH}}</string>
+    <string>{{EVERCLAW_PATH}}/skills/agent-chat</string>
     <key>EnvironmentVariables</key>
     <dict>
         <key>NODE_ENV</key>

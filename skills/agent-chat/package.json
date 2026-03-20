@@ -1,6 +1,6 @@
 {
   "name": "@everclaw/agent-chat",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "type": "module",
   "description": "XMTP real-time always-on messaging skill for EverClaw",

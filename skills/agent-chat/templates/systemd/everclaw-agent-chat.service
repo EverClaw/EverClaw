@@ -1,20 +1,24 @@
 [Unit]
 Description=EverClaw XMTP Agent Chat Daemon
+Documentation=https://github.com/EverClaw/EverClaw
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-WorkingDirectory={{EVERCLAW_PATH}}
-ExecStart={{NODE_BIN}} {{DAEMON_PATH}}
+WorkingDirectory={{EVERCLAW_PATH}}/skills/agent-chat
+ExecStart={{NODE_BIN}} {{EVERCLAW_PATH}}/skills/agent-chat/daemon.mjs
 Restart=on-failure
 RestartSec=10
 Environment=NODE_ENV=production
+Environment=HOME={{HOME}}
 
-# Logs to user journal (view with: journalctl --user -u everclaw-agent-chat)
-StandardOutput=journal
-StandardError=journal
-SyslogIdentifier=everclaw-agent-chat
+# Logging
+StandardOutput=append:{{LOG_DIR}}/agent-chat.log
+StandardError=append:{{LOG_DIR}}/agent-chat.err
+
+# Security (user-level, no special privileges needed)
+NoNewPrivileges=true
 
 [Install]
 WantedBy=default.target
