@@ -176,7 +176,7 @@ if [[ "$CLI_ONLY" != true ]]; then
   fi
 
   check_url "https://get.everclaw.xyz" GET "EverClaw installer redirect"
-  check_url "https://keys.everclaw.xyz/health" GET "EverClaw bootstrap key server"
+  check_url "https://keys.everclaw.xyz/health" GET "EverClaw bootstrap key server"  # root / has no route; /health is the liveness endpoint
 
   if [[ "$JSON_OUTPUT" != true ]]; then
     echo ""
