@@ -2,6 +2,24 @@
 
 All notable changes to EverClaw are documented here.
 
+## [2026.3.23] - 2026-03-23
+
+### Changed
+- **OpenClaw upgraded from v2026.3.13-1 to v2026.3.22** — Major upstream release with 20+ breaking changes (none affecting EverClaw), security hardening, and performance improvements:
+  - ClawHub now preferred over npm for skill installs (benefits EverClaw discovery)
+  - Gateway startup: prewarm primary model before channel startup (fixes cold-start first-message failures)
+  - Gateway startup: load bundled plugins from compiled dist (faster boot, especially in containers)
+  - Stable `memory-cli.js` entry point (fixes memory_search depending on hashed bundle names)
+  - Agent default timeout raised from 600s to 48h (EverClaw templates still set 300s explicitly)
+  - Exec sandbox: blocks JVM injection, glibc tunable exploitation, .NET hijack
+  - Security: blocks remote file:// URLs and UNC paths in media loading
+  - Security: fails closed on unresolved Bonjour/DNS-SD endpoints
+  - Security: rejects marketplace manifest path traversal
+  - Per-agent thinking/reasoning/fast defaults support
+  - MiniMax M2.7 and updated GLM catalog metadata
+  - License unchanged: MIT (Peter Steinberger)
+- **Dockerfile** — `OPENCLAW_VERSION` bumped from `v2026.3.13-1` to `v2026.3.22`
+
 ## [2026.3.20.1950] - 2026-03-20
 
 ### Fixed
