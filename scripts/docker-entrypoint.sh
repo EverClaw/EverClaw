@@ -32,6 +32,22 @@ if [ ! -f "$CONFIG_FILE" ]; then
   echo "   Config: $CONFIG_FILE"
 fi
 
+# Defensive strip of underscore-prefixed comment keys (OpenClaw schema is strict)
+# Prevents config validation failures from _note, _comment, _morpheusNote, etc.
+if [ -f "$CONFIG_FILE" ] && jq . "$CONFIG_FILE" > /dev/null 2>&1; then
+  TMP_STRIP=$(mktemp)
+  if jq 'walk(if type == "object" then with_entries(select(.key | startswith("_") | not)) else . end)' "$CONFIG_FILE" > "$TMP_STRIP" 2>/dev/null; then
+    if ! diff -q "$CONFIG_FILE" "$TMP_STRIP" > /dev/null 2>&1; then
+      mv "$TMP_STRIP" "$CONFIG_FILE"
+      echo "🔧 Stripped comment keys from config (OpenClaw schema compliance)"
+    else
+      rm -f "$TMP_STRIP"
+    fi
+  else
+    rm -f "$TMP_STRIP"
+  fi
+fi
+
 # ─── Template Placeholder Values ─────────────────────────────────────────────
 # Resolve placeholder values from env vars with sensible defaults.
 # These are substituted into boot templates during first-run scaffold.

@@ -91,7 +91,7 @@ function loadTemplate(name) {
 function stripComments(obj) {
   if (!obj || typeof obj !== 'object') return;
   for (const key of Object.keys(obj)) {
-    if (key === '_comment') {
+    if (key.startsWith('_')) {
       delete obj[key];
     } else {
       stripComments(obj[key]);

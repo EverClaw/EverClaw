@@ -85,7 +85,6 @@
         "models": [
           {
             "id": "qwen3.5:9b",
-            "_note": "Auto-selected by setup-ollama.sh based on your hardware. Replace with your actual model.",
             "name": "Qwen3.5 9B (Local Ollama)",
             "reasoning": false,
             "input": [
@@ -177,7 +176,6 @@
   },
   "agents": {
     "defaults": {
-      "_morpheusNote": "Morpheus Gateway models (GLM-5, gpt-oss-120b) can take 30-120s on first request due to P2P provider discovery. 300s timeout required for reliable gateway-only operation. Auto-applied since v2026.3.20.",
       "timeoutSeconds": 300,
       "model": {
         "_comment": "Set your primary to a Morpheus model. Add your paid provider as fallback.",

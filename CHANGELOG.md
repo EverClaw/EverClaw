@@ -2,6 +2,20 @@
 
 All notable changes to EverClaw are documented here.
 
+## [2026.3.25.1358] - 2026-03-25
+
+### Fixed
+- **Docker container crash on first-run** — OpenClaw v2026.3.13+ strict schema validation rejects `_`-prefixed comment keys (`_note`, `_morpheusNote`) in the default config, causing the gateway to exit fatally before reaching inference. Tester-reported: container starts, scaffolds workspace files, then crashes with "Config invalid / Unrecognized key" errors.
+  - Removed `_note` from `morpheus-local` provider in Dockerfile embedded default
+  - Removed `_morpheusNote` from `agents.defaults` in Dockerfile embedded default
+  - Removed `_morpheusNote` from `templates/openclaw-config-gateway-only.json`
+  - Removed `_note` and `_morpheusNote` from `templates/openclaw-config-mac.json`
+  - Removed `_note` and `_morpheusNote` from `templates/openclaw-config-linux.json`
+- **Native installer also affected** — `setup.mjs` `stripComments()` only stripped `_comment` keys, not `_note` or `_morpheusNote`. Mac/Linux native installs via `setup.mjs` would hit the same crash. Broadened to strip ALL `_`-prefixed keys.
+
+### Added
+- **Defensive config sanitizer in Docker entrypoint** — `docker-entrypoint.sh` now runs a jq `walk` strip of all `_`-prefixed keys after config copy, before gateway launch. Prevents this class of bug from ever recurring, even if future template edits accidentally add comment keys.
+
 ## [2026.3.23] - 2026-03-23
 
 ### Changed

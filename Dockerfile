@@ -141,7 +141,6 @@ RUN cat > /home/node/.openclaw/openclaw-default.json << 'DEFAULTCONFIG'
         ]
       },
       "morpheus-local": {
-        "_note": "Local P2P proxy — only active when MORPHEUS_PROXY_API_KEY env var is set",
         "baseUrl": "http://127.0.0.1:8083/v1",
         "api": "openai-completions",
         "models": [
@@ -155,7 +154,6 @@ RUN cat > /home/node/.openclaw/openclaw-default.json << 'DEFAULTCONFIG'
   },
   "agents": {
     "defaults": {
-      "_morpheusNote": "Morpheus Gateway models can take 30-120s on first request due to P2P provider discovery. 300s timeout required.",
       "timeoutSeconds": 300,
       "model": {
         "primary": "mor-gateway/glm-5",
@@ -188,7 +186,7 @@ RUN chmod +x /app/docker-entrypoint.sh
 
 # ─── Environment ──────────────────────────────────────────────────────────────
 
-ARG EVERCLAW_VERSION=2026.3.23.1800
+ARG EVERCLAW_VERSION=2026.3.25.1358
 ENV EVERCLAW_VERSION=${EVERCLAW_VERSION}
 ENV NODE_ENV=production
 ENV EVERCLAW_PROXY_PORT=8083
