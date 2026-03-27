@@ -1,0 +1,61 @@
+{
+  "gateway": {
+    "controlUi": {
+      "enabled": true,
+      "dangerouslyDisableDeviceAuth": true,
+      "allowInsecureAuth": true,
+      "allowedOrigins": [
+        "http://localhost:18789",
+        "http://127.0.0.1:18789",
+        "http://[::1]:18789"
+      ],
+      "dangerouslyAllowHostHeaderOriginFallback": true
+    }
+  },
+  "models": {
+    "mode": "merge",
+    "providers": {
+      "mor-gateway": {
+        "baseUrl": "https://api.mor.org/api/v1",
+        "apiKey": "YOUR_MOR_GATEWAY_API_KEY",
+        "api": "openai-completions",
+        "models": [
+          { "id": "glm-5", "name": "GLM-5 (Morpheus Gateway)", "reasoning": false },
+          { "id": "glm-4.7-flash", "name": "GLM 4.7 Flash (Morpheus Gateway)", "reasoning": false },
+          { "id": "kimi-k2.5", "name": "Kimi K2.5 (Morpheus Gateway)", "reasoning": false }
+        ]
+      },
+      "morpheus-local": {
+        "baseUrl": "http://127.0.0.1:8083/v1",
+        "api": "openai-completions",
+        "models": [
+          { "id": "glm-5", "name": "GLM-5 (Morpheus Local)", "reasoning": false },
+          { "id": "glm-4.7-flash", "name": "GLM 4.7 Flash (Morpheus Local)", "reasoning": false },
+          { "id": "kimi-k2.5", "name": "Kimi K2.5 (Morpheus Local)", "reasoning": false },
+          { "id": "kimi-k2-thinking", "name": "Kimi K2 Thinking (Morpheus Local)", "reasoning": true }
+        ]
+      }
+    }
+  },
+  "agents": {
+    "defaults": {
+      "timeoutSeconds": 300,
+      "model": {
+        "primary": "mor-gateway/glm-5",
+        "fallbacks": [
+          "mor-gateway/kimi-k2.5",
+          "mor-gateway/glm-4.7-flash"
+        ]
+      },
+      "models": {
+        "mor-gateway/glm-5": { "streaming": true },
+        "mor-gateway/kimi-k2.5": { "streaming": true },
+        "mor-gateway/glm-4.7-flash": { "streaming": true },
+        "morpheus-local/glm-5": { "streaming": true },
+        "morpheus-local/kimi-k2.5": { "streaming": true },
+        "morpheus-local/glm-4.7-flash": { "streaming": true },
+        "morpheus-local/kimi-k2-thinking": { "streaming": true }
+      }
+    }
+  }
+}
