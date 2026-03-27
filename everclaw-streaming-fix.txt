@@ -1,0 +1,606 @@
+diff --git a/.github/workflows/docker-build.yml b/.github/workflows/docker-build.yml
+index 0490511..a82d5cf 100644
+--- a/.github/workflows/docker-build.yml
++++ b/.github/workflows/docker-build.yml
+@@ -60,8 +60,11 @@ jobs:
+             # On push to main: tag as "latest" and version from package.json
+             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+             type=raw,value=${{ steps.version.outputs.VERSION }},enable=${{ github.ref == 'refs/heads/main' }}
+-            # On tag push: use the git tag (e.g., v2026.2.23)
+-            type=semver,pattern={{raw}}
++            # On tag push: tag as "latest", version from package.json, and the git tag
++            # (type=semver can't parse our 4-part YYYY.M.DD.HHMM format, so use type=match)
++            type=match,pattern=v(.*),group=1,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
++            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
++            type=raw,value=${{ steps.version.outputs.VERSION }},enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+             # PR builds: tag with PR number (not pushed)
+             type=ref,event=pr
+ 
+@@ -77,7 +80,7 @@ jobs:
+             OPENCLAW_VERSION=${{ steps.openclaw_version.outputs.OPENCLAW_VERSION }}
+           cache-from: type=gha
+           cache-to: type=gha,mode=max
+-          no-cache-filter: openclaw-builder
++          no-cache-filters: openclaw-builder
+           platforms: linux/amd64,linux/arm64
+ 
+       - name: Output image info
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 04710d6..e442b0f 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -2,6 +2,18 @@
+ 
+ All notable changes to EverClaw are documented here.
+ 
++## [2026.3.20.1632] - 2026-03-20
++
++### Fixed
++- **Streaming enabled on all model definitions** — Without `"streaming": true`, OpenClaw sends non-streaming requests and waits for the complete response before any data arrives. With Morpheus P2P provider discovery taking 30-120s, connections sit idle and hit timeout even with `timeoutSeconds: 300`. Streaming keeps the connection alive once the first token arrives. Fix:
++  - All 3 config templates now include `"streaming": true` on every model definition (19 models)
++  - `setup.mjs` auto-enables streaming on all model definitions during config merge (catches existing installs)
++  - `diagnose.sh` new check A9: flags models missing `streaming=true` as FAIL with fix instructions
++  - Docker entrypoint now auto-patches existing configs at container startup (streaming + timeout)
++  - Credit: Thomas (ClawBox) identified the root cause
++- **Docker tag-triggered builds were producing empty tags** — `type=semver` in the GitHub Actions metadata can't parse our 4-part `YYYY.M.DD.HHMM` version format, resulting in `"tags": []` and a failed push. Replaced with `type=match,pattern=v(.*),group=1` which extracts any version string after the `v` prefix. Tag pushes now also tag `:latest` for release convenience.
++- **Docker workflow `no-cache-filter` deprecation** — Renamed to `no-cache-filters` (plural) to match current `docker/build-push-action@v6` input schema
++
+ ## [2026.3.20.1442] - 2026-03-20
+ 
+ ### Fixed
+diff --git a/Dockerfile b/Dockerfile
+index a7dac6f..b553311 100644
+--- a/Dockerfile
++++ b/Dockerfile
+@@ -175,7 +175,7 @@ RUN chmod +x /app/docker-entrypoint.sh
+ 
+ # ─── Environment ──────────────────────────────────────────────────────────────
+ 
+-ARG EVERCLAW_VERSION=2026.3.20.1442
++ARG EVERCLAW_VERSION=2026.3.20.1632
+ ENV EVERCLAW_VERSION=${EVERCLAW_VERSION}
+ ENV NODE_ENV=production
+ ENV EVERCLAW_PROXY_PORT=8083
+diff --git a/docker-compose.yml b/docker-compose.yml
+index 881c2b6..ccf3b60 100644
+--- a/docker-compose.yml
++++ b/docker-compose.yml
+@@ -13,7 +13,7 @@
+ 
+ services:
+   everclaw:
+-    image: ghcr.io/everclaw/everclaw:2026.3.20.1258
++    image: ghcr.io/everclaw/everclaw:2026.3.20.1632
+     build:
+       context: .
+       dockerfile: Dockerfile
+diff --git a/package.json b/package.json
+index 15e6f19..561719c 100644
+--- a/package.json
++++ b/package.json
+@@ -1,6 +1,6 @@
+ {
+   "name": "everclaw",
+-  "version": "2026.3.20.1442",
++  "version": "2026.3.20.1632",
+   "private": true,
+   "description": "Morpheus inference skill for OpenClaw agents",
+   "type": "module",
+diff --git a/scripts/diagnose.sh b/scripts/diagnose.sh
+index 9fd6a5d..a3d700a 100755
+--- a/scripts/diagnose.sh
++++ b/scripts/diagnose.sh
+@@ -270,6 +270,28 @@ print(ts)
+   else
+     pass "timeoutSeconds=${timeout_check}s (sufficient for Morpheus Gateway)"
+   fi
++
++  # A9: Is streaming enabled on model definitions?
++  local non_streaming
++  non_streaming=$(python3 -c "
++import json
++c = json.load(open('$OPENCLAW_CONFIG'))
++count = 0
++for p in c.get('models',{}).get('providers',{}).values():
++    for m in p.get('models',[]):
++        if m.get('streaming') is not True:
++            count += 1
++print(count)
++" 2>/dev/null || echo "-1")
++
++  if [[ "$non_streaming" -gt 0 ]]; then
++    fail "${non_streaming} model(s) missing streaming=true — causes timeouts on slow P2P connections"
++    fix "Streaming keeps connections alive once tokens start flowing"
++    fix "Run: node scripts/setup.mjs --apply (auto-enables streaming)"
++    fix "Or manually add \"streaming\": true to each model in openclaw.json"
++  elif [[ "$non_streaming" -eq 0 ]]; then
++    pass "All models have streaming enabled"
++  fi
+ }
+ 
+ # ═════════════════════════════════════════════════════════════════════════════
+diff --git a/scripts/docker-entrypoint.sh b/scripts/docker-entrypoint.sh
+index 67ea694..ed8dc31 100644
+--- a/scripts/docker-entrypoint.sh
++++ b/scripts/docker-entrypoint.sh
+@@ -295,6 +295,45 @@ if jq . "$CONFIG_FILE" > /dev/null 2>&1; then
+   fi
+ fi
+ 
++# ─── Config Compatibility: Streaming + Timeout ───────────────────────────────
++# Ensure all model definitions have streaming=true and timeout is sufficient.
++# Without streaming, OpenClaw waits for the complete response — Morpheus P2P
++# provider discovery (30-120s) causes timeout before first token arrives.
++# Since v2026.3.20.1625.
++
++if jq . "$CONFIG_FILE" > /dev/null 2>&1; then
++  COMPAT_CHANGES=false
++  TMP_CONFIG=$(mktemp)
++
++  if jq '
++    # Enable streaming on all model definitions
++    if .models.providers then
++      .models.providers |= with_entries(
++        .value.models = (
++          if (.value.models | type) == "array" then
++            [.value.models[] | .streaming = true]
++          else .value.models end
++        )
++      )
++    else . end |
++    # Enforce minimum timeout for Morpheus Gateway
++    if (.agents.defaults.timeoutSeconds // 0) < 180 then
++      .agents.defaults.timeoutSeconds = 300
++    else . end
++  ' "$CONFIG_FILE" > "$TMP_CONFIG" 2>/dev/null; then
++    # Check if anything actually changed
++    if ! diff -q "$CONFIG_FILE" "$TMP_CONFIG" > /dev/null 2>&1; then
++      mv "$TMP_CONFIG" "$CONFIG_FILE"
++      echo "🔧 Auto-configured: streaming + timeout for Morpheus compatibility"
++      COMPAT_CHANGES=true
++    else
++      rm -f "$TMP_CONFIG"
++    fi
++  else
++    rm -f "$TMP_CONFIG"
++  fi
++fi
++
+ # ─── Start Morpheus Proxy (background) ──────────────────────────────────────
+ 
+ # Trap signals to clean up all children on exit
+diff --git a/scripts/setup.mjs b/scripts/setup.mjs
+index d00e9b1..f497746 100644
+--- a/scripts/setup.mjs
++++ b/scripts/setup.mjs
+@@ -210,6 +210,28 @@ function mergeConfig(existing, template) {
+     console.log(`  ℹ️  timeoutSeconds already ${currentTimeout}s (user value preserved)`);
+   }
+ 
++  // === STREAMING COMPATIBILITY (v2026.3.20+) ===
++  // Enable streaming on all model definitions. Without streaming, OpenClaw waits
++  // for the complete response before any data arrives. With Morpheus P2P provider
++  // discovery taking 30-120s, non-streaming requests often hit timeout before the
++  // first token arrives. Streaming keeps the connection alive once tokens start flowing.
++  if (merged.models?.providers) {
++    let streamingFixed = 0;
++    for (const [provName, prov] of Object.entries(merged.models.providers)) {
++      if (Array.isArray(prov.models)) {
++        for (const m of prov.models) {
++          if (m.streaming !== true) {
++            m.streaming = true;
++            streamingFixed++;
++          }
++        }
++      }
++    }
++    if (streamingFixed > 0) {
++      console.log(`  ✅ Enabled streaming on ${streamingFixed} model(s) — prevents timeout on slow P2P connections`);
++    }
++  }
++
+   return merged;
+ }
+ 
+diff --git a/templates/openclaw-config-gateway-only.json b/templates/openclaw-config-gateway-only.json
+index f0cacb7..2f41469 100644
+--- a/templates/openclaw-config-gateway-only.json
++++ b/templates/openclaw-config-gateway-only.json
+@@ -1,8 +1,8 @@
+ {
+-  "$schema": "Simplest Everclaw config — Morpheus API Gateway only (no local proxy needed).",
++  "$schema": "Simplest Everclaw config \u2014 Morpheus API Gateway only (no local proxy needed).",
+   "_instructions": [
+     "This is the EASIEST way to get started with Everclaw.",
+-    "Uses the Morpheus API Gateway (api.mor.org) — no local proxy-router needed.",
++    "Uses the Morpheus API Gateway (api.mor.org) \u2014 no local proxy-router needed.",
+     "Just get a free API key from https://app.mor.org and paste it below.",
+     "Works on any OS (macOS, Linux, Windows WSL2, Raspberry Pi).",
+     "IMPORTANT: 'everclaw' is a SKILL, NOT a provider.",
+@@ -34,8 +34,16 @@
+             "id": "glm-5",
+             "name": "GLM-5 (via Morpheus Gateway)",
+             "reasoning": false,
+-            "input": ["text"],
+-            "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
++            "streaming": true,
++            "input": [
++              "text"
++            ],
++            "cost": {
++              "input": 0,
++              "output": 0,
++              "cacheRead": 0,
++              "cacheWrite": 0
++            },
+             "contextWindow": 131072,
+             "maxTokens": 8192
+           },
+@@ -43,8 +51,16 @@
+             "id": "kimi-k2.5",
+             "name": "Kimi K2.5 (via Morpheus Gateway)",
+             "reasoning": false,
+-            "input": ["text"],
+-            "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
++            "streaming": true,
++            "input": [
++              "text"
++            ],
++            "cost": {
++              "input": 0,
++              "output": 0,
++              "cacheRead": 0,
++              "cacheWrite": 0
++            },
+             "contextWindow": 131072,
+             "maxTokens": 8192
+           },
+@@ -52,8 +68,16 @@
+             "id": "glm-4.7-flash",
+             "name": "GLM 4.7 Flash (via Morpheus Gateway)",
+             "reasoning": false,
+-            "input": ["text"],
+-            "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
++            "streaming": true,
++            "input": [
++              "text"
++            ],
++            "cost": {
++              "input": 0,
++              "output": 0,
++              "cacheRead": 0,
++              "cacheWrite": 0
++            },
+             "contextWindow": 131072,
+             "maxTokens": 8192
+           }
+diff --git a/templates/openclaw-config-linux.json b/templates/openclaw-config-linux.json
+index f8a2674..b97dd7d 100644
+--- a/templates/openclaw-config-linux.json
++++ b/templates/openclaw-config-linux.json
+@@ -4,7 +4,7 @@
+     "This template configures Morpheus inference for your OpenClaw agent on Linux.",
+     "IMPORTANT: 'everclaw' is a SKILL (tooling), NOT a provider.",
+     "Valid model prefixes: 'morpheus/' (local P2P) or 'mor-gateway/' (API Gateway).",
+-    "NEVER use 'everclaw/' as a model prefix — it will route to Venice and cause billing errors.",
++    "NEVER use 'everclaw/' as a model prefix \u2014 it will route to Venice and cause billing errors.",
+     "On Linux, use systemd instead of launchd for service management.",
+     "Wallet key storage: use environment variables or a secrets manager (no macOS Keychain)."
+   ],
+@@ -34,8 +34,16 @@
+             "id": "glm-5",
+             "name": "GLM-5 (via Morpheus Gateway)",
+             "reasoning": false,
+-            "input": ["text"],
+-            "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
++            "streaming": true,
++            "input": [
++              "text"
++            ],
++            "cost": {
++              "input": 0,
++              "output": 0,
++              "cacheRead": 0,
++              "cacheWrite": 0
++            },
+             "contextWindow": 131072,
+             "maxTokens": 8192
+           },
+@@ -43,8 +51,16 @@
+             "id": "kimi-k2.5",
+             "name": "Kimi K2.5 (via Morpheus Gateway)",
+             "reasoning": false,
+-            "input": ["text"],
+-            "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
++            "streaming": true,
++            "input": [
++              "text"
++            ],
++            "cost": {
++              "input": 0,
++              "output": 0,
++              "cacheRead": 0,
++              "cacheWrite": 0
++            },
+             "contextWindow": 131072,
+             "maxTokens": 8192
+           },
+@@ -52,8 +68,16 @@
+             "id": "glm-4.7-flash",
+             "name": "GLM 4.7 Flash (via Morpheus Gateway)",
+             "reasoning": false,
+-            "input": ["text"],
+-            "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
++            "streaming": true,
++            "input": [
++              "text"
++            ],
++            "cost": {
++              "input": 0,
++              "output": 0,
++              "cacheRead": 0,
++              "cacheWrite": 0
++            },
+             "contextWindow": 131072,
+             "maxTokens": 8192
+           }
+@@ -69,8 +93,16 @@
+             "_note": "Auto-selected by setup-ollama.sh based on your hardware. Replace with your actual model.",
+             "name": "Qwen3.5 9B (Local Ollama)",
+             "reasoning": false,
+-            "input": ["text"],
+-            "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
++            "streaming": true,
++            "input": [
++              "text"
++            ],
++            "cost": {
++              "input": 0,
++              "output": 0,
++              "cacheRead": 0,
++              "cacheWrite": 0
++            },
+             "contextWindow": 32768,
+             "maxTokens": 8192
+           }
+@@ -85,8 +117,16 @@
+             "id": "glm-5",
+             "name": "GLM-5 (via Morpheus P2P)",
+             "reasoning": false,
+-            "input": ["text"],
+-            "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
++            "streaming": true,
++            "input": [
++              "text"
++            ],
++            "cost": {
++              "input": 0,
++              "output": 0,
++              "cacheRead": 0,
++              "cacheWrite": 0
++            },
+             "contextWindow": 131072,
+             "maxTokens": 8192
+           },
+@@ -94,8 +134,16 @@
+             "id": "kimi-k2.5",
+             "name": "Kimi K2.5 (via Morpheus P2P)",
+             "reasoning": false,
+-            "input": ["text"],
+-            "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
++            "streaming": true,
++            "input": [
++              "text"
++            ],
++            "cost": {
++              "input": 0,
++              "output": 0,
++              "cacheRead": 0,
++              "cacheWrite": 0
++            },
+             "contextWindow": 131072,
+             "maxTokens": 8192
+           },
+@@ -103,8 +151,16 @@
+             "id": "glm-4.7-flash",
+             "name": "GLM 4.7 Flash (via Morpheus P2P)",
+             "reasoning": false,
+-            "input": ["text"],
+-            "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
++            "streaming": true,
++            "input": [
++              "text"
++            ],
++            "cost": {
++              "input": 0,
++              "output": 0,
++              "cacheRead": 0,
++              "cacheWrite": 0
++            },
+             "contextWindow": 131072,
+             "maxTokens": 8192
+           },
+@@ -112,8 +168,16 @@
+             "id": "kimi-k2-thinking",
+             "name": "Kimi K2 Thinking (via Morpheus P2P)",
+             "reasoning": false,
+-            "input": ["text"],
+-            "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
++            "streaming": true,
++            "input": [
++              "text"
++            ],
++            "cost": {
++              "input": 0,
++              "output": 0,
++              "cacheRead": 0,
++              "cacheWrite": 0
++            },
+             "contextWindow": 131072,
+             "maxTokens": 8192
+           }
+diff --git a/templates/openclaw-config-mac.json b/templates/openclaw-config-mac.json
+index d821437..44bafbb 100644
+--- a/templates/openclaw-config-mac.json
++++ b/templates/openclaw-config-mac.json
+@@ -4,7 +4,7 @@
+     "This template configures Morpheus inference for your OpenClaw agent on macOS.",
+     "IMPORTANT: 'everclaw' is a SKILL (tooling), NOT a provider.",
+     "Valid model prefixes: 'morpheus/' (local P2P) or 'mor-gateway/' (API Gateway).",
+-    "NEVER use 'everclaw/' as a model prefix — it will route to Venice and cause billing errors."
++    "NEVER use 'everclaw/' as a model prefix \u2014 it will route to Venice and cause billing errors."
+   ],
+   "gateway": {
+     "controlUi": {
+@@ -32,8 +32,16 @@
+             "id": "glm-5",
+             "name": "GLM-5 (via Morpheus Gateway)",
+             "reasoning": false,
+-            "input": ["text"],
+-            "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
++            "streaming": true,
++            "input": [
++              "text"
++            ],
++            "cost": {
++              "input": 0,
++              "output": 0,
++              "cacheRead": 0,
++              "cacheWrite": 0
++            },
+             "contextWindow": 131072,
+             "maxTokens": 8192
+           },
+@@ -41,8 +49,16 @@
+             "id": "kimi-k2.5",
+             "name": "Kimi K2.5 (via Morpheus Gateway)",
+             "reasoning": false,
+-            "input": ["text"],
+-            "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
++            "streaming": true,
++            "input": [
++              "text"
++            ],
++            "cost": {
++              "input": 0,
++              "output": 0,
++              "cacheRead": 0,
++              "cacheWrite": 0
++            },
+             "contextWindow": 131072,
+             "maxTokens": 8192
+           },
+@@ -50,8 +66,16 @@
+             "id": "glm-4.7-flash",
+             "name": "GLM 4.7 Flash (via Morpheus Gateway)",
+             "reasoning": false,
+-            "input": ["text"],
+-            "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
++            "streaming": true,
++            "input": [
++              "text"
++            ],
++            "cost": {
++              "input": 0,
++              "output": 0,
++              "cacheRead": 0,
++              "cacheWrite": 0
++            },
+             "contextWindow": 131072,
+             "maxTokens": 8192
+           }
+@@ -67,8 +91,16 @@
+             "_note": "Auto-selected by setup-ollama.sh based on your hardware. Replace with your actual model.",
+             "name": "Qwen3.5 9B (Local Ollama)",
+             "reasoning": false,
+-            "input": ["text"],
+-            "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
++            "streaming": true,
++            "input": [
++              "text"
++            ],
++            "cost": {
++              "input": 0,
++              "output": 0,
++              "cacheRead": 0,
++              "cacheWrite": 0
++            },
+             "contextWindow": 32768,
+             "maxTokens": 8192
+           }
+@@ -83,8 +115,16 @@
+             "id": "glm-5",
+             "name": "GLM-5 (via Morpheus P2P)",
+             "reasoning": false,
+-            "input": ["text"],
+-            "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
++            "streaming": true,
++            "input": [
++              "text"
++            ],
++            "cost": {
++              "input": 0,
++              "output": 0,
++              "cacheRead": 0,
++              "cacheWrite": 0
++            },
+             "contextWindow": 131072,
+             "maxTokens": 8192
+           },
+@@ -92,8 +132,16 @@
+             "id": "kimi-k2.5",
+             "name": "Kimi K2.5 (via Morpheus P2P)",
+             "reasoning": false,
+-            "input": ["text"],
+-            "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
++            "streaming": true,
++            "input": [
++              "text"
++            ],
++            "cost": {
++              "input": 0,
++              "output": 0,
++              "cacheRead": 0,
++              "cacheWrite": 0
++            },
+             "contextWindow": 131072,
+             "maxTokens": 8192
+           },
+@@ -101,8 +149,16 @@
+             "id": "glm-4.7-flash",
+             "name": "GLM 4.7 Flash (via Morpheus P2P)",
+             "reasoning": false,
+-            "input": ["text"],
+-            "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
++            "streaming": true,
++            "input": [
++              "text"
++            ],
++            "cost": {
++              "input": 0,
++              "output": 0,
++              "cacheRead": 0,
++              "cacheWrite": 0
++            },
+             "contextWindow": 131072,
+             "maxTokens": 8192
+           },
+@@ -110,8 +166,16 @@
+             "id": "kimi-k2-thinking",
+             "name": "Kimi K2 Thinking (via Morpheus P2P)",
+             "reasoning": false,
+-            "input": ["text"],
+-            "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
++            "streaming": true,
++            "input": [
++              "text"
++            ],
++            "cost": {
++              "input": 0,
++              "output": 0,
++              "cacheRead": 0,
++              "cacheWrite": 0
++            },
+             "contextWindow": 131072,
+             "maxTokens": 8192
+           }

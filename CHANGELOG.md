@@ -2,6 +2,18 @@
 
 All notable changes to EverClaw are documented here.
 
+## [2026.3.27.0434] - 2026-03-27
+
+### Fixed
+- **Docker build heredoc syntax** — Heredoc (`<< 'EOF'`) doesn't work in Dockerfile without BuildKit frontend directive. Replaced with `COPY config/openclaw-default.json` approach.
+- **Gitleaks false positives** — Secret scanner flagged 256 false positives (public contract addresses, example API keys, test fixtures). Added `.gitleaks.toml` allowlist with proper TOML syntax.
+- **Wallet tests in CI** — Interactive confirmation prompts (`CONFIRM SWAP?`, `CONFIRM APPROVE?`) caused 10 test failures in CI (no stdin). Added `CI_NON_INTERACTIVE` flag auto-approves when `EVERCLAW_YES=1` or `CI=true`.
+- **Smoke test script path** — Container path was wrong (`scripts/setup.mjs` vs `/home/node/.openclaw/workspace/skills/everclaw/scripts/setup.mjs`).
+
+### Added
+- **config/openclaw-default.json** — Standalone config file for Docker COPY (replaces embedded heredoc).
+- **.gitleaks.toml** — Allowlist for public values, example keys, test fixtures, docs paths.
+
 ## [2026.3.27] - 2026-03-26
 
 ### Added
