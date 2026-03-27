@@ -24,7 +24,7 @@ import path from "node:path";
 const PROXY_PORT = parseInt(process.env.MORPHEUS_PROXY_PORT || "8083", 10);
 const PROXY_HOST = process.env.EVERCLAW_PROXY_HOST || "127.0.0.1";
 const ROUTER_URL = process.env.MORPHEUS_ROUTER_URL || "http://localhost:8082";
-const COOKIE_PATH = process.env.MORPHEUS_COOKIE_PATH || path.join(process.env.HOME, "morpheus/.cookie");
+const COOKIE_PATH = process.env.MORPHEUS_COOKIE_PATH || path.join(process.env.HOME, ".morpheus/.cookie");
 const SESSION_DURATION = parseInt(process.env.MORPHEUS_SESSION_DURATION || "604800", 10); // 7 days default
 const RENEW_BEFORE_SEC = parseInt(process.env.MORPHEUS_RENEW_BEFORE || "3600", 10); // renew 1 hour before expiry
 // === STAGE 1: STRONG AUTH ENFORCEMENT (no weak default) ===

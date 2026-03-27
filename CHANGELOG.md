@@ -2,6 +2,20 @@
 
 All notable changes to EverClaw are documented here.
 
+## [2026.3.27] - 2026-03-26
+
+### Added
+- **Docker VOLUME declarations for Barney + persistent storage** — Barney VM platform auto-detects `VOLUME` instructions in Dockerfile and attaches 20 GB persistent storage. Without these, container restarts lose all memories, configs, wallet keys, and sessions. Changes:
+  - Added `VOLUME ["/home/node/.openclaw", "/home/node/.morpheus", "/home/node/.everclaw"]` to Dockerfile
+  - Added `.everclaw` directory creation in Dockerfile (for wallet.enc)
+  - Added `chmod 700 /home/node/.everclaw` for wallet security hardening
+  - Updated docker-compose.yml to mount all three volumes for local Docker parity
+  - Updated Dockerfile header comment with full `docker run -v` example
+- **Memories, configs, wallet keys, and proxy sessions now survive container updates** — previously all ephemeral on restart
+
+### Fixed
+- **Cookie path bug in morpheus-proxy.mjs** — Script was reading cookie from `~/morpheus/.cookie` (wrong) instead of `~/.morpheus/.cookie` (correct). Container would fail to reuse existing sessions even with volume mounted. Fixed line 27 to use correct path.
+
 ## [2026.3.26.0037] - 2026-03-26
 
 ### Changed

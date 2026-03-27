@@ -13,7 +13,7 @@
 
 services:
   everclaw:
-    image: ghcr.io/everclaw/everclaw:2026.3.26.0037
+    image: ghcr.io/everclaw/everclaw:2026.3.27.0209
     build:
       context: .
       dockerfile: Dockerfile
@@ -56,8 +56,10 @@ services:
     tmpfs:
       - /tmp:noexec,size=64m
     volumes:
-      # Persist config and workspace across restarts
+      # Persist config, memories, wallet keys, skills, and proxy state
       - ${OPENCLAW_HOME:-~/.openclaw}:/home/node/.openclaw
+      - ${MORPHEUS_HOME:-~/.morpheus}:/home/node/.morpheus
+      - ${EVERCLAW_HOME:-~/.everclaw}:/home/node/.everclaw
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://127.0.0.1:18789/health"]
       interval: 30s

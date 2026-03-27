@@ -19,6 +19,8 @@
 #     -p 18789:18789 \
 #     -p 8083:8083 \
 #     -v ~/.openclaw:/home/node/.openclaw \
+#     -v ~/.morpheus:/home/node/.morpheus \
+#     -v ~/.everclaw:/home/node/.everclaw \
 #     --name everclaw \
 #     ghcr.io/everclaw/everclaw:latest
 #
@@ -83,12 +85,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Create workspace directories
+# Create all persistent directories (for Barney + local Docker)
 RUN mkdir -p /home/node/.openclaw/workspace/skills/everclaw \
     && mkdir -p /home/node/.openclaw/workspace/scripts \
     && mkdir -p /home/node/.openclaw/workspace/memory \
     && mkdir -p /home/node/.openclaw/workspace/shifts \
     && mkdir -p /home/node/.morpheus \
+    && mkdir -p /home/node/.everclaw \
+    && chmod 700 /home/node/.everclaw \
     && touch /home/node/.morpheus/.cookie \
     && touch /home/node/.morpheus/sessions.json \
     && chown -R node:node /home/node
@@ -186,7 +190,7 @@ RUN chmod +x /app/docker-entrypoint.sh
 
 # ─── Environment ──────────────────────────────────────────────────────────────
 
-ARG EVERCLAW_VERSION=2026.3.26.0037
+ARG EVERCLAW_VERSION=2026.3.27.0209
 ENV EVERCLAW_VERSION=${EVERCLAW_VERSION}
 ENV NODE_ENV=production
 ENV EVERCLAW_PROXY_PORT=8083
@@ -201,6 +205,14 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
     CMD curl -sf http://127.0.0.1:18789/health 2>/dev/null || \
         curl -sf http://127.0.0.1:${EVERCLAW_PROXY_PORT}/health 2>/dev/null || \
         exit 1
+
+# ─── Persistent Volumes for Barney & Docker ───────────────────────────────────
+# Barney auto-detects these VOLUME declarations and attaches the 20 GB
+# persistent storage SKU automatically.
+# Memories (MEMORY.md + daily *.md files), configs, skills state,
+# wallet keys (.everclaw/wallet.enc), proxy sessions & cookies
+# now survive container restarts and image updates.
+VOLUME ["/home/node/.openclaw", "/home/node/.morpheus", "/home/node/.everclaw"]
 
 # Run as non-root
 USER node
