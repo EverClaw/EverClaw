@@ -42,12 +42,48 @@ esac
 
 echo "Platform: ${PLATFORM}-${GOARCH}"
 
-# Get latest release tag
+# Get latest release tag (Issue #12, 4A: detect rate limiting)
 echo "Finding latest release..."
-LATEST_TAG=$(curl -sL "https://api.github.com/repos/${REPO}/releases/latest" | grep '"tag_name"' | head -1 | sed -E 's/.*"tag_name": *"([^"]+)".*/\1/')
+# Use GITHUB_TOKEN for authenticated requests if available
+if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+  GH_RESPONSE=$(curl -sL -w "\n%{http_code}" --fail -H "Authorization: Bearer ${GITHUB_TOKEN}" "https://api.github.com/repos/${REPO}/releases/latest" 2>/dev/null || true)
+else
+  GH_RESPONSE=$(curl -sL -w "\n%{http_code}" --fail "https://api.github.com/repos/${REPO}/releases/latest" 2>/dev/null || true)
+fi
+GH_HTTP_CODE=$(echo "$GH_RESPONSE" | tail -1)
+GH_BODY=$(echo "$GH_RESPONSE" | sed '$d')
+
+# Detect network failure (empty response = curl couldn't connect at all)
+if [[ -z "$GH_HTTP_CODE" ]] || [[ "$GH_HTTP_CODE" == "000" ]]; then
+  echo "ERROR: Cannot reach GitHub API (network failure)."
+  echo "   Possible causes:"
+  echo "   - No internet connectivity"
+  echo "   - DNS resolution failure"
+  echo "   - Firewall blocking api.github.com"
+  echo "   - SSL/TLS handshake failure"
+  echo ""
+  echo "   Test connectivity: curl -sL https://api.github.com/rate_limit"
+  exit 1
+fi
+
+if [[ "$GH_HTTP_CODE" == "403" ]] || [[ "$GH_HTTP_CODE" == "429" ]]; then
+  echo "ERROR: GitHub API rate limit exceeded (HTTP $GH_HTTP_CODE)."
+  echo "   Unauthenticated requests are limited to 60/hour."
+  echo ""
+  echo "   Options:"
+  echo "   1. Wait up to an hour for the rate limit to reset"
+  echo "   2. Set GITHUB_TOKEN to use authenticated requests (5,000/hour):"
+  echo "        export GITHUB_TOKEN=ghp_your_token_here"
+  echo "        bash install.sh"
+  echo ""
+  echo "   Check your rate limit: curl -sL https://api.github.com/rate_limit | grep -A2 rate"
+  exit 1
+fi
+
+LATEST_TAG=$(echo "$GH_BODY" | grep '"tag_name"' | head -1 | sed -E 's/.*"tag_name": *"([^"]+)".*/\1/')
 
 if [[ -z "$LATEST_TAG" ]]; then
-  echo "ERROR: Could not determine latest release."
+  echo "ERROR: Could not determine latest release (HTTP $GH_HTTP_CODE)."
   echo "   Possible causes:"
   echo "   - No network connectivity"
   echo "   - GitHub API rate limit (60/hr unauthenticated)"
@@ -59,9 +95,30 @@ fi
 
 echo "Latest release: ${LATEST_TAG}"
 
+# Use GITHUB_TOKEN if available for authenticated requests (5,000/hr vs 60/hr)
+GH_AUTH_HEADER=""
+if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+  GH_AUTH_HEADER="Authorization: Bearer ${GITHUB_TOKEN}"
+  echo "   Using authenticated GitHub API (higher rate limit)"
+fi
+
 # Fetch release asset list from GitHub API
 echo "Querying release assets..."
-ASSETS_JSON=$(curl -sL "https://api.github.com/repos/${REPO}/releases/tags/${LATEST_TAG}")
+if [[ -n "$GH_AUTH_HEADER" ]]; then
+  ASSETS_RESPONSE=$(curl -sL -w "\n%{http_code}" -H "$GH_AUTH_HEADER" "https://api.github.com/repos/${REPO}/releases/tags/${LATEST_TAG}" 2>/dev/null || true)
+else
+  ASSETS_RESPONSE=$(curl -sL -w "\n%{http_code}" "https://api.github.com/repos/${REPO}/releases/tags/${LATEST_TAG}" 2>/dev/null || true)
+fi
+ASSETS_HTTP_CODE=$(echo "$ASSETS_RESPONSE" | tail -1)
+ASSETS_JSON=$(echo "$ASSETS_RESPONSE" | sed '$d')
+
+if [[ "$ASSETS_HTTP_CODE" == "403" ]] || [[ "$ASSETS_HTTP_CODE" == "429" ]]; then
+  echo "ERROR: GitHub API rate limit hit while fetching assets (HTTP $ASSETS_HTTP_CODE)."
+  echo "   The first API call succeeded but the second was rate-limited."
+  echo "   Set GITHUB_TOKEN for authenticated requests (5,000/hour):"
+  echo "     export GITHUB_TOKEN=ghp_your_token_here && bash install.sh"
+  exit 1
+fi
 
 # Map platform names used in release assets
 # Older releases: mor-launch-darwin-arm64.zip
@@ -85,6 +142,13 @@ CLI_ASSET=$(echo "$ASSETS_JSON" | grep -o '"name": *"[^"]*"' | sed 's/"name": *"
 if [[ -n "$ROUTER_ASSET" ]]; then
   echo "Found standalone binary: ${ROUTER_ASSET}"
 
+  # Issue #12 (4C): Back up existing binaries before overwriting
+  if [[ -f "$INSTALL_DIR/proxy-router" ]]; then
+    BACKUP_NAME="$INSTALL_DIR/proxy-router.bak.$(date +%Y%m%d%H%M%S)"
+    echo "   ⚠️  Backing up existing proxy-router → $(basename "$BACKUP_NAME")"
+    cp "$INSTALL_DIR/proxy-router" "$BACKUP_NAME"
+  fi
+
   ROUTER_URL="https://github.com/${REPO}/releases/download/${LATEST_TAG}/${ROUTER_ASSET}"
   echo "Downloading ${ROUTER_ASSET}..."
   if ! curl -sL -o "$INSTALL_DIR/proxy-router" "$ROUTER_URL"; then
@@ -95,9 +159,18 @@ if [[ -n "$ROUTER_ASSET" ]]; then
   chmod +x "$INSTALL_DIR/proxy-router"
 
   if [[ -n "$CLI_ASSET" ]]; then
+    if [[ -f "$INSTALL_DIR/mor-cli" ]]; then
+      BACKUP_NAME="$INSTALL_DIR/mor-cli.bak.$(date +%Y%m%d%H%M%S)"
+      echo "   ⚠️  Backing up existing mor-cli → $(basename "$BACKUP_NAME")"
+      cp "$INSTALL_DIR/mor-cli" "$BACKUP_NAME"
+    fi
     CLI_URL="https://github.com/${REPO}/releases/download/${LATEST_TAG}/${CLI_ASSET}"
     echo "Downloading ${CLI_ASSET}..."
-    curl -sL -o "$INSTALL_DIR/mor-cli" "$CLI_URL" && chmod +x "$INSTALL_DIR/mor-cli"
+    if ! curl -sL -o "$INSTALL_DIR/mor-cli" "$CLI_URL"; then
+      echo "ERROR: CLI download failed. URL: $CLI_URL"
+    else
+      chmod +x "$INSTALL_DIR/mor-cli"
+    fi
   fi
 
 else
@@ -134,7 +207,18 @@ else
     exit 1
   fi
 
+  # Issue #12 (4C): Back up existing binaries before overwriting
+  for existing_bin in "$INSTALL_DIR/proxy-router" "$INSTALL_DIR/mor-cli"; do
+    if [[ -f "$existing_bin" ]]; then
+      BACKUP_NAME="${existing_bin}.bak.$(date +%Y%m%d%H%M%S)"
+      echo "   ⚠️  Backing up existing $(basename "$existing_bin") → $(basename "$BACKUP_NAME")"
+      cp "$existing_bin" "$BACKUP_NAME"
+    fi
+  done
+
   echo "Extracting to ${INSTALL_DIR}..."
+  # Note: unzip -o still overwrites non-binary files (.env, models-config.json, etc.)
+  # but those are only created below if they DON'T already exist (idempotent).
   unzip -o -q "$ZIPFILE" -d "$INSTALL_DIR"
 fi
 
