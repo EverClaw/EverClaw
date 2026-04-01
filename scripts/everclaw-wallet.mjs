@@ -16,7 +16,7 @@
  *   import-key <key>         Import existing private key
  */
 
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync, mkdirSync, chmodSync, copyFileSync } from "node:fs";
 import { join } from "node:path";
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
@@ -29,6 +29,42 @@ import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 // --- Configuration ---
 const KEYCHAIN_ACCOUNT = process.env.EVERCLAW_KEYCHAIN_ACCOUNT || "everclaw-agent";
 const KEYCHAIN_SERVICE = process.env.EVERCLAW_KEYCHAIN_SERVICE || "everclaw-wallet-key";
+
+// --- Shell Injection Prevention (Issue #10/#11) ---
+// KEYCHAIN_ACCOUNT and KEYCHAIN_SERVICE come from env vars.
+// A malicious actor who can set env vars (supply chain, compromised subprocess)
+// could inject shell commands via these values. We:
+//   1. Validate: only allow safe characters (alphanumeric, hyphens, dots, underscores)
+//   2. Eliminate shell: use execFileSync (array args) instead of execSync (shell string)
+
+/**
+ * Validate a keychain parameter contains only safe characters.
+ * Rejects values that could enable shell injection.
+ * @param {string} value - The parameter value to validate
+ * @param {string} paramName - Human-readable name for error messages
+ * @returns {string} The validated value
+ * @throws {Error} If the value contains unsafe characters or is empty
+ */
+function sanitizeKeychainParam(value, paramName) {
+  const str = String(value || '');
+  if (!str) {
+    console.error(`❌ ${paramName} cannot be empty.`);
+    process.exit(1);
+  }
+  if (!/^[A-Za-z0-9._-]+$/.test(str)) {
+    console.error(
+      `❌ ${paramName} contains invalid characters: "${str.slice(0, 80)}"\n` +
+      `   Only alphanumeric characters, dots, hyphens, and underscores are allowed (no spaces or other punctuation).\n` +
+      `   This restriction prevents shell injection attacks.`
+    );
+    process.exit(1);
+  }
+  return str;
+}
+
+// Validate at load time — fail fast before any keychain operation
+sanitizeKeychainParam(KEYCHAIN_ACCOUNT, "EVERCLAW_KEYCHAIN_ACCOUNT");
+sanitizeKeychainParam(KEYCHAIN_SERVICE, "EVERCLAW_KEYCHAIN_SERVICE");
 const RPC_URL = process.env.EVERCLAW_RPC || "https://base-mainnet.public.blastapi.io";
 const KEY_STORE_PATH = process.env.EVERCLAW_KEY_STORE || join(process.env.HOME || "", ".everclaw", "wallet.enc");
 
@@ -77,16 +113,27 @@ const QUOTER_ABI = parseAbi([
 function macKeychainStore(key) {
   try {
     try {
-      execSync(
-        `security add-generic-password -a "${KEYCHAIN_ACCOUNT}" -s "${KEYCHAIN_SERVICE}" -w "${key}" -U`,
-        { stdio: "pipe" }
-      );
+      execFileSync("security", [
+        "add-generic-password",
+        "-a", KEYCHAIN_ACCOUNT,
+        "-s", KEYCHAIN_SERVICE,
+        "-w", key,
+        "-U"
+      ], { stdio: "pipe" });
     } catch {
-      try { execSync(`security delete-generic-password -a "${KEYCHAIN_ACCOUNT}" -s "${KEYCHAIN_SERVICE}"`, { stdio: "pipe" }); } catch {}
-      execSync(
-        `security add-generic-password -a "${KEYCHAIN_ACCOUNT}" -s "${KEYCHAIN_SERVICE}" -w "${key}"`,
-        { stdio: "pipe" }
-      );
+      try {
+        execFileSync("security", [
+          "delete-generic-password",
+          "-a", KEYCHAIN_ACCOUNT,
+          "-s", KEYCHAIN_SERVICE
+        ], { stdio: "pipe" });
+      } catch {}
+      execFileSync("security", [
+        "add-generic-password",
+        "-a", KEYCHAIN_ACCOUNT,
+        "-s", KEYCHAIN_SERVICE,
+        "-w", key
+      ], { stdio: "pipe" });
     }
     return true;
   } catch (e) {
@@ -97,10 +144,12 @@ function macKeychainStore(key) {
 
 function macKeychainRetrieve() {
   try {
-    return execSync(
-      `security find-generic-password -a "${KEYCHAIN_ACCOUNT}" -s "${KEYCHAIN_SERVICE}" -w`,
-      { stdio: "pipe", encoding: "utf-8" }
-    ).trim();
+    return execFileSync("security", [
+      "find-generic-password",
+      "-a", KEYCHAIN_ACCOUNT,
+      "-s", KEYCHAIN_SERVICE,
+      "-w"
+    ], { stdio: "pipe", encoding: "utf-8" }).trim();
   } catch {
     return null;
   }
@@ -109,7 +158,7 @@ function macKeychainRetrieve() {
 // -- Linux libsecret backend (secret-tool) --
 function hasSecretTool() {
   try {
-    execSync("which secret-tool", { stdio: "pipe" });
+    execFileSync("which", ["secret-tool"], { stdio: "pipe" });
     return true;
   } catch {
     return false;
@@ -118,10 +167,12 @@ function hasSecretTool() {
 
 function libsecretStore(key) {
   try {
-    execSync(
-      `secret-tool store --label="Everclaw Wallet" service "${KEYCHAIN_SERVICE}" account "${KEYCHAIN_ACCOUNT}"`,
-      { stdio: "pipe", input: key }
-    );
+    execFileSync("secret-tool", [
+      "store",
+      "--label=Everclaw Wallet",
+      "service", KEYCHAIN_SERVICE,
+      "account", KEYCHAIN_ACCOUNT
+    ], { stdio: ["pipe", "pipe", "pipe"], input: key });
     return true;
   } catch (e) {
     console.error("❌ secret-tool store failed:", e.message);
@@ -131,10 +182,11 @@ function libsecretStore(key) {
 
 function libsecretRetrieve() {
   try {
-    return execSync(
-      `secret-tool lookup service "${KEYCHAIN_SERVICE}" account "${KEYCHAIN_ACCOUNT}"`,
-      { stdio: "pipe", encoding: "utf-8" }
-    ).trim();
+    return execFileSync("secret-tool", [
+      "lookup",
+      "service", KEYCHAIN_SERVICE,
+      "account", KEYCHAIN_ACCOUNT
+    ], { stdio: "pipe", encoding: "utf-8" }).trim();
   } catch {
     return null;
   }
