@@ -2,7 +2,7 @@
 
 All notable changes to EverClaw are documented here.
 
-## [Unreleased] - 2026-04-01
+## [2026.4.1.1447] - 2026-04-01
 
 ### Security
 - **[Critical] MITM protection for bootstrap API (Issue #8)** — `bootstrap-client.mjs` now enforces HTTPS for all remote API calls. Plain `http://` is rejected with a clear error unless targeting localhost/127.0.0.1 (dev only). Prevents network observers from reading wallet addresses, PoW challenges, and nonces in transit.
