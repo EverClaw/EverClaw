@@ -80,6 +80,35 @@ const FLAG_UNLIMITED = process.argv.includes("--unlimited");
 const CI_ALLOW_EXPORT = process.env.EVERCLAW_ALLOW_EXPORT === "1";
 const MAX_GAS_LIMIT = BigInt(process.env.EVERCLAW_MAX_GAS || "500000");
 
+// Issue #13 5C: Module-level DRY_RUN (no global mutation)
+let DRY_RUN = false;
+
+// ─── Issue #13 5A: Safe error logging ───────────────────────────────────
+function logSafeError(context, error) {
+  const msg = error?.message || error?.toString() || '(no details)';
+  console.error(`❌ ${context}`);
+  if (process.env.DEBUG === '1' || process.env.DEBUG === 'true') {
+    console.error(`   ${msg}`);
+  }
+}
+
+// ─── Issue #13 5D: Safe interactive confirmation ────────────────────────
+async function confirmAction(message = "Proceed with this action?") {
+  if (CI_NON_INTERACTIVE) {
+    console.log(`\n⚠️  [auto-yes] ${message}`);
+    return true;
+  }
+  if (!process.stdin.isTTY) {
+    console.error("❌ No interactive terminal available. Set EVERCLAW_YES=1 for non-interactive mode.");
+    return false;
+  }
+  const answer = await new Promise(r => {
+    process.stdout.write(`\n⚠️  ${message} `);
+    process.stdin.once("data", d => r(d.toString().trim().toLowerCase()));
+  });
+  return answer === "yes";
+}
+
 // --- Contract Addresses (Base Mainnet) ---
 const MOR_TOKEN = "0x7431aDa8a591C955a994a21710752EF9b882b8e3";
 const USDC_TOKEN = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
@@ -570,22 +599,13 @@ async function cmdSwap(tokenIn, amountStr) {
   console.log(`     Expected out: ${formatEther(quotedOutput)} MOR`);
   console.log(`     Min out (after ${SLIPPAGE_BPS / 100}% slippage): ${formatEther(amountOutMinimum)} MOR`);
 
-  let swapAnswer;
-  if (CI_NON_INTERACTIVE) {
-    console.log(`\n⚠️  CI MODE: Auto-approved swap of ${amountStr} ${tokenIn.toUpperCase()} → MOR`);
-    swapAnswer = "yes";
-  } else {
-    swapAnswer = await new Promise(r => {
-      process.stdout.write("\n⚠️  CONFIRM SWAP? (type yes to proceed) ");
-      process.stdin.once("data", d => r(d.toString().trim().toLowerCase()));
-    });
-  }
-  if (swapAnswer !== "yes") {
+  // Issue #13 5D: Use confirmAction for safe stdin handling
+  if (!(await confirmAction("CONFIRM SWAP? (type yes to proceed)"))) {
     console.log("Cancelled by user.");
     process.exit(0);
   }
 
-  if (global.DRY_RUN) {
+  if (DRY_RUN) {
     console.log("\n🔒 DRY-RUN: Simulation passed. Skipping actual swap transaction.");
     process.exit(0);
   }
@@ -690,26 +710,16 @@ async function cmdApprove(amountStr) {
     console.log("   all your MOR can be drained.");
   }
 
-  let approveAnswer;
-  if (CI_NON_INTERACTIVE) {
-    const approvedType = isUnlimited ? "UNLIMITED (--unlimited flag)" : `${amountStr || "unknown"} MOR`;
-    console.log(`\n⚠️  CI MODE: Auto-approved MOR approval: ${approvedType}`);
-    approveAnswer = "yes";
-  } else {
-    approveAnswer = await new Promise(r => {
-      const promptText = isUnlimited
-        ? "⚠️  CONFIRM UNLIMITED APPROVAL? (type yes to proceed) "
-        : `⚠️  CONFIRM APPROVE ${amountStr} MOR? (type yes to proceed) `;
-      process.stdout.write(promptText);
-      process.stdin.once("data", d => r(d.toString().trim().toLowerCase()));
-    });
-  }
-  if (approveAnswer !== "yes") {
+  // Issue #13 5D: Use confirmAction for safe stdin handling
+  const promptText = isUnlimited
+    ? "CONFIRM UNLIMITED APPROVAL? (type yes to proceed)"
+    : `CONFIRM APPROVE ${amountStr} MOR? (type yes to proceed)`;
+  if (!(await confirmAction(promptText))) {
     console.log("Cancelled by user.");
     process.exit(0);
   }
 
-  if (global.DRY_RUN) {
+  if (DRY_RUN) {
     console.log("\n🔒 DRY-RUN: Simulation passed. Skipping actual approve transaction.");
     process.exit(0);
   }
@@ -864,33 +874,33 @@ const [,, command, ...rawArgs] = process.argv;
 const KNOWN_FLAGS = new Set(["--unlimited", "--dry-run"]);
 const args = rawArgs.filter(a => !KNOWN_FLAGS.has(a));
 
-// === GLOBAL DRY-RUN SAFETY ===
-if (rawArgs.includes("--dry-run")) {
+// Issue #13 5C: Module-level DRY_RUN (no global mutation)
+if (process.argv.includes("--dry-run")) {
   console.log("🔒 DRY-RUN MODE ENABLED — no real transactions will be sent");
-  global.DRY_RUN = true;
+  DRY_RUN = true;
 }
 
 switch (command) {
   case "setup":
-    cmdSetup().catch(console.error);
+    cmdSetup().catch(e => logSafeError("Setup command", e));
     break;
   case "address":
-    cmdAddress().catch(console.error);
+    cmdAddress().catch(e => logSafeError("Address command", e));
     break;
   case "balance":
-    cmdBalance().catch(console.error);
+    cmdBalance().catch(e => logSafeError("Balance command", e));
     break;
   case "swap":
-    cmdSwap(args[0], args[1]).catch(console.error);
+    cmdSwap(args[0], args[1]).catch(e => logSafeError("Swap command", e));
     break;
   case "approve":
-    cmdApprove(args[0]).catch(console.error);
+    cmdApprove(args[0]).catch(e => logSafeError("Approve command", e));
     break;
   case "export-key":
-    cmdExportKey().catch(console.error);
+    cmdExportKey().catch(e => logSafeError("Export key command", e));
     break;
   case "import-key":
-    cmdImportKey(args[0]).catch(console.error);
+    cmdImportKey(args[0]).catch(e => logSafeError("Import key command", e));
     break;
   default:
     showHelp();

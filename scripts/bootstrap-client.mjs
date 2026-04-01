@@ -42,6 +42,15 @@ try {
 const BOOTSTRAP_DIR = path.join(os.homedir(), '.everclaw');
 const STATE_FILE = path.join(BOOTSTRAP_DIR, 'bootstrap.json');
 
+// ─── Issue #13 5A: Safe error logging ───────────────────────────────
+function logSafeError(context, error) {
+  const msg = error?.message || error?.toString() || '(no details)';
+  console.error(`❌ ${context}`);
+  if (process.env.DEBUG === '1' || process.env.DEBUG === 'true') {
+    console.error(`   ${msg}`);
+  }
+}
+
 // ─── TLS Enforcement (Issue #8: MITM protection) ──────────────────────────
 
 /**
@@ -342,7 +351,7 @@ async function bootstrap() {
 
     return resultData;
   } catch (error) {
-    console.error('🚨 Bootstrap failed:', error.message);
+    logSafeError('Bootstrap failed', error);
     throw error;
   }
 }
@@ -387,7 +396,7 @@ Examples:
 }
 
 const isMain = process.argv[1]?.endsWith('bootstrap-client.mjs');
-if (isMain) main().catch(e => { console.error(e.message); process.exit(1); });
+if (isMain) main().catch(e => { logSafeError('Bootstrap', e); process.exit(1); });
 
 // Export for testing
 export { bootstrap, getFingerprint, solvePoW };

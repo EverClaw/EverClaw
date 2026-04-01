@@ -18,6 +18,33 @@ import { execSync } from "node:child_process";
 // Config
 const RPC_URL = process.env.EVERCLAW_RPC || "https://base-mainnet.public.blastapi.io";
 const MOR_TOKEN = "0x7431aDa8a591C955a994a21710752EF9b882b8e3";
+
+// ─── Issue #13 5A: Safe error logging ───────────────────────────────
+function logSafeError(context, error) {
+  const msg = error?.message || error?.toString() || '(no details)';
+  console.error(`❌ ${context}`);
+  if (process.env.DEBUG === '1' || process.env.DEBUG === 'true') {
+    console.error(`   ${msg}`);
+  }
+}
+
+// ─── Issue #13 5D: Safe interactive confirmation ────────────────────────
+const CI_NON_INTERACTIVE = process.env.EVERCLAW_YES === '1' || process.env.CI === 'true';
+async function confirmAction(message = "Proceed with this action?") {
+  if (CI_NON_INTERACTIVE) {
+    console.log(`\n⚠️  [auto-yes] ${message}`);
+    return true;
+  }
+  if (!process.stdin.isTTY) {
+    console.error("❌ No interactive terminal available. Set EVERCLAW_YES=1 for non-interactive mode.");
+    return false;
+  }
+  const answer = await new Promise(r => {
+    process.stdout.write(`\n⚠️  ${message} `);
+    process.stdin.once("data", d => r(d.toString().trim().toLowerCase()));
+  });
+  return answer === "yes";
+}
 const SAFE_ADDRESS = process.env.MORPHEUS_SAFE_ADDRESS;
 const ROUTER_WALLET = process.env.MORPHEUS_WALLET_ADDRESS;
 if (!SAFE_ADDRESS) { console.error("❌ MORPHEUS_SAFE_ADDRESS env var required"); process.exit(1); }
@@ -198,11 +225,8 @@ async function main() {
   });
   console.log("   ✅ Simulation passed");
 
-  const answer = await new Promise(resolve => {
-    process.stdout.write("⚠️  CONFIRM TRANSACTION? (type yes to proceed) ");
-    process.stdin.once("data", d => resolve(d.toString().trim().toLowerCase()));
-  });
-  if (answer !== "yes") {
+  // Issue #13 5D: Use confirmAction for safe stdin handling
+  if (!(await confirmAction("CONFIRM TRANSACTION? (type yes to proceed)"))) {
     console.log("Cancelled by user.");
     process.exit(0);
   }
@@ -257,4 +281,4 @@ async function main() {
   }
 }
 
-main().catch(console.error);
+main().catch(e => logSafeError('Safe transfer', e));

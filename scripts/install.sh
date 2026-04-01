@@ -42,6 +42,15 @@ esac
 
 echo "Platform: ${PLATFORM}-${GOARCH}"
 
+# Issue #13 5B: Version pinning for reproducible builds
+# Use VERSION env var to pin a specific release tag, e.g.:
+#   VERSION=v2026.4.1 ./install.sh
+# Default: fetch latest from GitHub API
+if [[ -n "${VERSION:-}" ]]; then
+  echo "Using pinned version: ${VERSION}"
+  LATEST_TAG="${VERSION}"
+else
+
 # Get latest release tag (Issue #12, 4A: detect rate limiting)
 echo "Finding latest release..."
 # Use GITHUB_TOKEN for authenticated requests if available
@@ -94,6 +103,8 @@ if [[ -z "$LATEST_TAG" ]]; then
 fi
 
 echo "Latest release: ${LATEST_TAG}"
+
+fi  # end VERSION pinning block
 
 # Use GITHUB_TOKEN if available for authenticated requests (5,000/hr vs 60/hr)
 GH_AUTH_HEADER=""
