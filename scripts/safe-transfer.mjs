@@ -111,8 +111,20 @@ async function main() {
     console.error(`\n❌ Signer ${account.address} is not an owner of this Safe!`);
     process.exit(1);
   }
-  console.log(`   ✅ Signer is an owner\n`);
-  
+  console.log(`   ✅ Signer is an owner`);
+
+  // Validate threshold === 1 (Issue #12, 4D)
+  // This script produces a single signature. A multi-sig Safe (threshold > 1)
+  // would accept the tx submission but it would revert on-chain, wasting gas.
+  if (threshold !== 1n) {
+    console.error(`\n❌ Safe threshold is ${threshold}, but this script requires exactly 1.`);
+    console.error(`   This is a ${threshold}-of-${owners.length} Safe — needs ${threshold} signatures to execute.`);
+    console.error(`   This script produces only 1 signature — the transaction would revert on-chain.`);
+    console.error(`   Use the Safe web interface at https://app.safe.global for multi-sig transactions.`);
+    process.exit(1);
+  }
+  console.log(`   ✅ Threshold is 1 (single-signer execution)\n`);
+
   if (!shouldExecute) {
     console.log("📋 Dry run complete. Run with --execute to submit transaction.\n");
     return;

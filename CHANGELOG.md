@@ -2,6 +2,24 @@
 
 All notable changes to EverClaw are documented here.
 
+## [2026.4.1.1835] - 2026-04-01
+
+### Security — Unsafe Defaults (Issue #12)
+- **[4A] GitHub API rate limit breaks installer (`install.sh`)** — Unauthenticated GitHub API calls (60/hr limit) caused confusing failures on repeated installs. **Fix:** `curl` now uses `--fail` and captures HTTP status code. 403/429 responses show a clear "rate limit exceeded" error with instructions to set `GITHUB_TOKEN` for authenticated requests (5,000/hr). All API calls use Bearer auth when token is available.
+- **[4B] Unlimited approval no longer the default (`everclaw-wallet.mjs`)** — `approve` without an amount silently defaulted to `maxUint256` (unlimited). **Fix:** Running `approve` without a specified amount OR `--unlimited` flag now errors with clear instructions. Explicit `--unlimited` flag required for unlimited approval in ALL modes (interactive and CI). **Breaking change:** Scripts using bare `approve` must update to `approve <amount>` or `approve --unlimited`.
+- **[4C] Binary backup before overwrite (`install.sh`)** — `unzip -o` silently overwrote existing binaries with no rollback path. **Fix:** Both install strategies (standalone binary download and legacy zip extraction) now back up existing `proxy-router` and `mor-cli` with timestamped names (e.g., `proxy-router.bak.20260401174500`) before overwriting.
+- **[4D] Safe threshold validated as exactly 1 (`safe-transfer.mjs`)** — Script only checked `threshold >= 1` but never asserted `=== 1`. A 2-of-2 Safe would pass validation but revert on-chain (wasting gas). **Fix:** Asserts `threshold === 1n` before proceeding. Multi-sig Safes get a clear error showing N-of-M configuration and suggesting the Safe web interface.
+
+### Changed
+- **`cmdApprove()` safety hardened** — Unlimited MOR approval is no longer opt-out (CI-only gate); it's opt-in everywhere via `--unlimited` flag.
+- **Help text updated** — "CI Safety" section renamed to "Safety" (applies to all modes). `approve` command now shows `<amount>` as required with `--unlimited` as separate option.
+- **3 CI-safety tests updated** — Tests for `cmdApprove` behavior updated to match new stricter approval gate.
+
+### Added
+- **22 new tests (`tests/issue-12-unsafe-defaults.mjs`)** — 4 test suites covering rate limit detection (7 tests), unlimited approval flag (6 tests), binary backup (4 tests), and Safe threshold validation (5 tests). All source-level verification via file content assertions.
+- **GITHUB_TOKEN support in installer** — Optional `GITHUB_TOKEN` env var enables authenticated GitHub API requests (5,000/hr vs 60/hr unauthenticated).
+- **Total test count: 77** (55 previous + 22 new), 35/35 passing for Issue #12 + CI-safety suites.
+
 ## [2026.4.1.1712] - 2026-04-01
 
 ### Security

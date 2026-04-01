@@ -11,7 +11,8 @@
  *   balance                  Show ETH, MOR, USDC balances
  *   swap eth <amount>        Swap ETH for MOR via Uniswap V3
  *   swap usdc <amount>       Swap USDC for MOR via Uniswap V3
- *   approve [amount]         Approve MOR spending for Morpheus Diamond contract
+ *   approve <amount>         Approve MOR for Morpheus staking (bounded amount)
+ *   approve --unlimited       Approve unlimited MOR (explicit opt-in required)
  *   export-key               Print private key (use with caution)
  *   import-key <key>         Import existing private key
  */
@@ -75,7 +76,7 @@ const OS = platform();
 const SLIPPAGE_BPS = parseInt(process.env.EVERCLAW_SLIPPAGE_BPS || "100", 10); // 100 = 1%
 const TX_CONFIRMATIONS = parseInt(process.env.EVERCLAW_CONFIRMATIONS || "1", 10);
 const CI_NON_INTERACTIVE = process.env.EVERCLAW_YES === "1" || process.env.CI === "true";
-const CI_ALLOW_UNLIMITED = process.argv.includes("--unlimited");
+const FLAG_UNLIMITED = process.argv.includes("--unlimited");
 const CI_ALLOW_EXPORT = process.env.EVERCLAW_ALLOW_EXPORT === "1";
 const MAX_GAS_LIMIT = BigInt(process.env.EVERCLAW_MAX_GAS || "500000");
 
@@ -622,15 +623,35 @@ async function cmdSwap(tokenIn, amountStr) {
 }
 
 async function cmdApprove(amountStr) {
-  // CI safety gate: check BEFORE wallet retrieval for fail-fast
-  const isUnlimited = !amountStr;
-  if (CI_NON_INTERACTIVE && isUnlimited && !CI_ALLOW_UNLIMITED) {
-    console.error("\n❌ CI MODE: Unlimited MOR approval blocked.");
-    console.error("   CI/automated environments cannot silently approve unlimited token spending.");
-    console.error("   To explicitly allow this, pass the --unlimited flag:");
-    console.error("     node everclaw-wallet.mjs approve --unlimited");
-    console.error("   Or specify a bounded amount:");
+  // Issue #12 (4B): Unlimited approval must be explicitly opted into.
+  // Previously, omitting the amount silently defaulted to maxUint256.
+  // Now: --unlimited flag required for unlimited. No amount + no flag = error.
+  //
+  // Flag flow (defense-in-depth):
+  //   1. KNOWN_FLAGS filters "--unlimited" from args[] before cmdApprove is called
+  //   2. So amountStr is always undefined when --unlimited is passed (never "--unlimited")
+  //   3. FLAG_UNLIMITED is set from process.argv at module top level
+  //   4. Guard: if amountStr somehow contains a flag, reject it
+  if (amountStr && amountStr.startsWith("--")) {
+    console.error(`\n❌ Unknown flag: ${amountStr}`);
+    console.error("   Use: approve <amount> or approve --unlimited");
+    process.exit(1);
+  }
+  if (FLAG_UNLIMITED && amountStr) {
+    console.error("\n❌ Cannot specify both an amount and --unlimited.");
+    console.error("   Use: approve 1000  OR  approve --unlimited");
+    process.exit(1);
+  }
+  const isUnlimited = !amountStr && FLAG_UNLIMITED; // explicit --unlimited flag
+  const wantsDefault = !amountStr && !FLAG_UNLIMITED; // no amount, no flag
+
+  if (wantsDefault) {
+    console.error("\n❌ No approval amount specified.");
+    console.error("   For safety, unlimited MOR approval is no longer the default.");
+    console.error("   Specify a bounded amount:");
     console.error("     node everclaw-wallet.mjs approve 1000");
+    console.error("   Or explicitly opt into unlimited approval:");
+    console.error("     node everclaw-wallet.mjs approve --unlimited");
     process.exit(1);
   }
 
@@ -643,9 +664,9 @@ async function cmdApprove(amountStr) {
   const publicClient = getPublicClient();
   const walletClient = getWalletClient(key);
 
-  // Default: approve max (so user doesn't have to re-approve)
-  const amount = amountStr ? parseEther(amountStr) : maxUint256;
-  const displayAmount = amountStr || "unlimited";
+  // Amount is either user-specified or maxUint256 (explicit --unlimited)
+  const amount = isUnlimited ? maxUint256 : parseEther(amountStr);
+  const displayAmount = isUnlimited ? "unlimited (--unlimited)" : `${amountStr} MOR`;
 
   console.log(`\n🔓 Approving MOR for Morpheus Diamond contract...`);
   console.log(`   Amount: ${displayAmount}`);
@@ -796,7 +817,8 @@ Commands:
   balance                  Show ETH, MOR, USDC balances
   swap eth <amount>        Swap ETH for MOR via Uniswap V3
   swap usdc <amount>       Swap USDC for MOR via Uniswap V3
-  approve [amount]         Approve MOR for Morpheus staking
+  approve <amount>         Approve MOR for Morpheus staking (bounded)
+  approve --unlimited       Approve unlimited MOR (explicit opt-in)
   export-key               Print private key (use with caution)
   import-key <0xkey>       Import existing private key
 
@@ -824,22 +846,21 @@ Environment:
 Examples:
   node everclaw-wallet.mjs setup
   node everclaw-wallet.mjs swap eth 0.05
-  node everclaw-wallet.mjs approve 1000              # Bounded approval (CI-safe)
-  node everclaw-wallet.mjs approve --unlimited        # Unlimited approval (explicit)
+  node everclaw-wallet.mjs approve 1000              # Bounded approval (recommended)
+  node everclaw-wallet.mjs approve --unlimited        # Unlimited approval (explicit opt-in)
   node everclaw-wallet.mjs balance
 
-CI Safety:
-  In CI mode (EVERCLAW_YES=1 or CI=true):
-  - Bounded approvals and swaps auto-confirm (simulated first)
-  - Unlimited approvals BLOCKED unless --unlimited flag is passed
-  - Key export BLOCKED unless EVERCLAW_ALLOW_EXPORT=1 is set
+Safety:
+  - Unlimited approvals ALWAYS require --unlimited flag (CI and interactive)
+  - Bounded approvals and swaps auto-confirm in CI mode (simulated first)
+  - Key export BLOCKED in CI unless EVERCLAW_ALLOW_EXPORT=1 is set
 `);
 }
 
 // --- Main ---
 const [,, command, ...rawArgs] = process.argv;
 
-// Filter known flags from positional args
+// KNOWN_FLAGS + filter ensures flags never reach cmdApprove as amountStr
 const KNOWN_FLAGS = new Set(["--unlimited", "--dry-run"]);
 const args = rawArgs.filter(a => !KNOWN_FLAGS.has(a));
 

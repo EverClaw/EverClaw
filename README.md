@@ -82,8 +82,8 @@ node ~/.openclaw/workspace/skills/everclaw/scripts/everclaw-wallet.mjs setup
 # Step 3: Send ETH to the wallet address shown above, then swap for MOR
 node ~/.openclaw/workspace/skills/everclaw/scripts/everclaw-wallet.mjs swap eth 0.05
 
-# Step 4: Approve MOR for staking
-node ~/.openclaw/workspace/skills/everclaw/scripts/everclaw-wallet.mjs approve
+# Step 4: Approve MOR for staking (specify amount or use --unlimited)
+node ~/.openclaw/workspace/skills/everclaw/scripts/everclaw-wallet.mjs approve 1000
 
 # Step 5: Install the proxy and guardian (auto-starts on boot)
 bash ~/.openclaw/workspace/skills/everclaw/scripts/install-proxy.sh
@@ -288,7 +288,7 @@ When a session ends, your MOR comes back. Open a new session with the same token
 | Check balance | `node scripts/everclaw-wallet.mjs balance` |
 | Swap ETH→MOR | `node scripts/everclaw-wallet.mjs swap eth 0.05` |
 | Swap USDC→MOR | `node scripts/everclaw-wallet.mjs swap usdc 50` |
-| Approve MOR | `node scripts/everclaw-wallet.mjs approve` |
+| Approve MOR | `node scripts/everclaw-wallet.mjs approve 1000` |
 | Install proxy + guardian | `bash skills/everclaw/scripts/install-proxy.sh` |
 | Start router | `bash skills/everclaw/scripts/start.sh` |
 | Proxy health | `curl http://127.0.0.1:8083/health` |

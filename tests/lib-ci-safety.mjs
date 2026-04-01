@@ -66,8 +66,9 @@ describe("Issue #9: CI Mode Token Approval Safety", () => {
   it("CI mode blocks unlimited approve without --unlimited flag", () => {
     const result = runWallet(["approve"], { EVERCLAW_YES: "1" });
     assert.equal(result.exitCode, 1, "should exit with code 1");
+    // Issue #12 (4B): approve without amount now errors in ALL modes, not just CI
     assert.ok(
-      result.stderr.includes("CI MODE: Unlimited MOR approval blocked"),
+      result.stderr.includes("No approval amount specified"),
       `stderr should contain block message, got: ${result.stderr}`
     );
   });
@@ -75,8 +76,9 @@ describe("Issue #9: CI Mode Token Approval Safety", () => {
   it("CI=true also blocks unlimited approve without --unlimited flag", () => {
     const result = runWallet(["approve"], { CI: "true" });
     assert.equal(result.exitCode, 1, "should exit with code 1");
+    // Issue #12 (4B): approve without amount now errors in ALL modes, not just CI
     assert.ok(
-      result.stderr.includes("CI MODE: Unlimited MOR approval blocked"),
+      result.stderr.includes("No approval amount specified"),
       `stderr should contain block message, got: ${result.stderr}`
     );
   });
@@ -156,10 +158,9 @@ describe("Issue #9: CI Mode Token Approval Safety", () => {
   // --- Non-CI mode: prompts still work ---
 
   it("Non-CI mode does NOT auto-confirm (approve hangs on stdin, times out)", () => {
-    // Without CI env vars, the script should try to read stdin and time out/fail
-    // We can't easily test interactive prompts, but we verify it does NOT exit 1
-    // with the CI block message
-    const result = runWallet(["approve", "--dry-run"], {});
+    // Issue #12 (4B): approve without amount now errors immediately in all modes.
+    // Use a bounded amount to test interactive behavior.
+    const result = runWallet(["approve", "1000", "--dry-run"], {});
     // In non-CI mode without stdin, it will either hang (timeout) or crash on stdin read
     // The key assertion: it should NOT show CI block messages
     assert.ok(
@@ -186,11 +187,12 @@ describe("Issue #9: CI Mode Token Approval Safety", () => {
     );
   });
 
-  it("Help text includes CI Safety section", () => {
+  it("Help text includes Safety section", () => {
     const result = runWallet([], {});
+    // Issue #12 (4B): renamed from "CI Safety" to "Safety" (applies to all modes)
     assert.ok(
-      result.stdout.includes("CI Safety"),
-      `help should include CI Safety section`
+      result.stdout.includes("Safety:"),
+      `help should include Safety section`
     );
   });
 });
