@@ -767,8 +767,8 @@ docker run -e EVERCLAW_WALLET_PASSPHRASE_FILE=/run/secrets/wallet_pass ...
 |----------|-------------|
 | `EVERCLAW_WALLET_PASSPHRASE` | Wallet passphrase (takes priority over interactive prompt) |
 | `EVERCLAW_WALLET_PASSPHRASE_FILE` | Path to file containing passphrase (Docker secrets) |
-| `EVERCLAW_KEYCHAIN_ACCOUNT` | Keychain account name (default: `everclaw-agent`) |
-| `EVERCLAW_KEYCHAIN_SERVICE` | Keychain service name (default: `everclaw-wallet-key`) |
+| `EVERCLAW_KEYCHAIN_ACCOUNT` | Keychain account name (default: `everclaw-agent`). Only `[A-Za-z0-9._-]` allowed. |
+| `EVERCLAW_KEYCHAIN_SERVICE` | Keychain service name (default: `everclaw-wallet-key`). Only `[A-Za-z0-9._-]` allowed. |
 | `EVERCLAW_KEY_STORE` | Override encrypted file path (default: `~/.everclaw/wallet.enc`) |
 
 ### Full Command Reference

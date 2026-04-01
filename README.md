@@ -331,6 +331,8 @@ The encrypted file fallback uses **AES-256-GCM** with keys derived from your pas
 
 For Docker/CI, set `EVERCLAW_WALLET_PASSPHRASE` or `EVERCLAW_WALLET_PASSPHRASE_FILE` environment variables.
 
+**Shell injection hardening (v2026.4.1.1712):** The `EVERCLAW_KEYCHAIN_ACCOUNT` and `EVERCLAW_KEYCHAIN_SERVICE` environment variables are validated at load time — only alphanumeric characters, dots, hyphens, and underscores are allowed. All keychain operations use `execFileSync` (array arguments) instead of shell strings, structurally eliminating shell injection even if validation were bypassed.
+
 ### Security Tiers
 
 EverClaw configures OpenClaw's exec-approval system with one of three security presets:
