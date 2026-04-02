@@ -314,6 +314,7 @@ When a session ends, your MOR comes back. Open a new session with the same token
 - **Node.js** — v20+ (bundled with OpenClaw)
 - **ETH or USDC on Base** — to swap for MOR tokens
 - **macOS or Linux** — macOS Keychain or libsecret for native key storage; encrypted file fallback works everywhere
+- **age, zstd, jq** — for backup/restore features (auto-installed by `install.sh`)
 
 That's it. No external accounts. No API keys. No subscriptions.
 
@@ -384,6 +385,38 @@ EVERCLAW_SECURITY_TIER=low|recommended|maximum
 ```
 
 Running `node scripts/setup.mjs --apply` sets this automatically. You can also run `bash scripts/diagnose.sh` to check.
+
+---
+
+## Backup & Restore
+
+EverClaw includes full disaster recovery and agent migration tools.
+
+### Download Your Agent (Chat-Triggered)
+
+Say "download my agent" in chat. Your agent will create an encrypted backup and give you a temporary download link with a passphrase. The link expires in 15 minutes and works once.
+
+### Restore on a New Machine
+
+```bash
+# Native (macOS / Linux)
+curl -fsSL https://get.everclaw.xyz/restore | bash
+
+# Docker-to-Docker
+curl -fsSL https://get.everclaw.xyz/restore | bash -s -- --docker
+```
+
+The restore script is self-contained — installs dependencies, decrypts the backup, adapts config for the new machine, sets up services, and verifies everything works.
+
+### Manual Export
+
+```bash
+# Preview what will be exported
+node scripts/agent-download.mjs --dry-run
+
+# Create backup with wallet
+node scripts/agent-download.mjs --include-wallet --wallet-address 0x...
+```
 
 ---
 

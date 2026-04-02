@@ -83,6 +83,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     ca-certificates \
     jq \
+    age \
+    zstd \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
@@ -131,7 +133,7 @@ RUN chmod +x /app/docker-entrypoint.sh
 
 # ─── Environment ──────────────────────────────────────────────────────────────
 
-ARG EVERCLAW_VERSION=2026.4.2.0128
+ARG EVERCLAW_VERSION=2026.4.2.1957
 ENV EVERCLAW_VERSION=${EVERCLAW_VERSION}
 ENV NODE_ENV=production
 ENV EVERCLAW_PROXY_PORT=8083
