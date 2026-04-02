@@ -42,6 +42,73 @@ esac
 
 echo "Platform: ${PLATFORM}-${GOARCH}"
 
+# ── Install system dependencies (backup/restore, agent-download) ─────────
+install_system_deps() {
+  local missing=()
+  command -v age &>/dev/null    || missing+=("age")
+  command -v zstd &>/dev/null   || missing+=("zstd")
+  command -v jq &>/dev/null     || missing+=("jq")
+
+  if [[ ${#missing[@]} -eq 0 ]]; then
+    echo "✅ System dependencies present (age, zstd, jq)"
+    return 0
+  fi
+
+  echo "📦 Installing missing system dependencies: ${missing[*]}..."
+
+  if [[ "$PLATFORM" == "darwin" ]]; then
+    # macOS — use Homebrew
+    if ! command -v brew &>/dev/null; then
+      echo "  Homebrew not found. Installing..."
+      /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" || {
+        echo "⚠️  Homebrew install failed. Install manually: ${missing[*]}"
+        return 0
+      }
+      eval "$(/opt/homebrew/bin/brew shellenv)" 2>/dev/null || \
+        eval "$(/usr/local/bin/brew shellenv)" 2>/dev/null || true
+    fi
+    for pkg in "${missing[@]}"; do
+      brew install "$pkg" 2>/dev/null || echo "⚠️  Failed to install $pkg via brew"
+    done
+  else
+    # Linux — detect package manager
+    if command -v apt-get &>/dev/null; then
+      sudo apt-get update -qq 2>/dev/null
+      for pkg in "${missing[@]}"; do
+        sudo apt-get install -y "$pkg" 2>/dev/null || echo "⚠️  Failed to install $pkg via apt"
+      done
+    elif command -v dnf &>/dev/null; then
+      for pkg in "${missing[@]}"; do
+        sudo dnf install -y "$pkg" 2>/dev/null || echo "⚠️  Failed to install $pkg via dnf"
+      done
+    elif command -v pacman &>/dev/null; then
+      for pkg in "${missing[@]}"; do
+        sudo pacman -S --noconfirm "$pkg" 2>/dev/null || echo "⚠️  Failed to install $pkg via pacman"
+      done
+    elif command -v apk &>/dev/null; then
+      for pkg in "${missing[@]}"; do
+        sudo apk add "$pkg" 2>/dev/null || echo "⚠️  Failed to install $pkg via apk"
+      done
+    else
+      echo "⚠️  No supported package manager found. Install manually: ${missing[*]}"
+    fi
+  fi
+
+  # Verify
+  local still_missing=()
+  command -v age &>/dev/null    || still_missing+=("age")
+  command -v zstd &>/dev/null   || still_missing+=("zstd")
+  command -v jq &>/dev/null     || still_missing+=("jq")
+  if [[ ${#still_missing[@]} -gt 0 ]]; then
+    echo "⚠️  Could not install: ${still_missing[*]}"
+    echo "   Backup/restore features will be unavailable until installed."
+  else
+    echo "✅ System dependencies installed (age, zstd, jq)"
+  fi
+}
+
+install_system_deps
+
 # Issue #13 5B: Version pinning for reproducible builds
 # Use VERSION env var to pin a specific release tag, e.g.:
 #   VERSION=v2026.4.1 ./install.sh

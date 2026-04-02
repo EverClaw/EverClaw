@@ -2541,9 +2541,104 @@ Set up automatic daily backups:
 }
 ```
 
+### Agent Download (Chat-Triggered Export & Restore)
+
+<!-- After final review, run through SkillGuard before publishing to ClawHub as davidajohnston/agent-download -->
+
+The agent download feature lets users say "download my agent" in chat to get a one-click encrypted backup with a temporary download link.
+
+#### Triggers
+
+Activate this flow when the user says any of:
+- "download my agent" / "download my AI" / "download my EverClaw" / "download my OpenClaw"
+- "export my agent" / "backup my agent" / "migrate my agent"
+- "move my agent to another machine" / "take my agent home" / "move me to my computer"
+- "download my agent with wallet" / "export everything including wallet" / "full backup with keys"
+
+Do NOT activate for: "download a file" (generic), "export my data" (ambiguous — ask to clarify), "backup" alone (too vague).
+
+#### Tool Usage
+
+##### Pre-flight Check (always run first)
+```bash
+node scripts/agent-download.mjs --dry-run
+```
+Parse stdout JSON. Show the user a summary of what will be backed up and the estimated size.
+
+##### Create Backup (after user confirms)
+```bash
+node scripts/agent-download.mjs --json
+```
+Parse stdout JSON. Present the download link + passphrase.
+
+##### With Wallet (user explicitly requests)
+```bash
+node scripts/agent-download.mjs --json --include-wallet --wallet-address 0x...
+```
+Requires the user to provide their wallet address first (for confirmation).
+
+##### Kill Stale Server (if needed)
+```bash
+if [ -f /tmp/everclaw-download-server.pid ]; then
+  kill "$(cat /tmp/everclaw-download-server.pid)" 2>/dev/null
+  rm -f /tmp/everclaw-download-server.pid
+fi
+```
+
+#### Conversation Flow
+
+1. **User triggers** → Run dry-run → Show summary (size, what's included, wallet status)
+2. **User confirms** → Run orchestrator → Parse JSON → Show download link + passphrase
+3. **If URL is null** → Show the `publicUrlHint` text from the orchestrator JSON → Ask user for their server URL → Construct link from cached token: `<user-url>:18790/<token>`
+4. **If wallet requested** → Show warning → Ask for wallet address → Validate → Run with `--include-wallet --wallet-address`
+5. **If orchestrator JSON has `docker: true`** → Show Docker-specific restore instructions: `curl -fsSL https://get.everclaw.xyz/restore | bash -s -- --docker`
+6. **If error** → Show error message + suggestion from JSON → Offer to retry or install missing deps
+
+#### Important Rules
+
+- **Always run dry-run first** — show the user what they're getting before creating anything
+- **Always show passphrase in a distinct visual block** — monospace/backticks
+- **Never log the passphrase** to any file, memory, or external channel
+- **Never auto-start export** without user confirmation
+- **Cache the JSON response** — don't re-run orchestrator just for URL formatting
+- **Don't poll the server** — it's fire-and-forget with 15-minute auto-shutdown
+- **Warn about wallet inclusion** risks every time
+
+#### Platform Formatting
+
+| Platform | Rules |
+|----------|-------|
+| Web chat | Markdown OK, monospace for passphrase, full URLs clickable |
+| Discord | Wrap URLs in `<>` to suppress embeds. No tables — use bullet lists |
+| Telegram | Markdown OK. Wrap passphrase in backticks |
+| Signal | Plain text only. No markdown. Use CAPS for emphasis |
+| WhatsApp | No headers, no tables. **Bold** OK. Links plain |
+
+#### Restore Guidance
+
+When users ask about restoring (without a prior download), direct them to:
+```bash
+curl -fsSL https://get.everclaw.xyz/restore | bash
+```
+
+The restore script is self-contained — handles dependencies, decryption, config adaptation, service setup, and verification automatically.
+
+#### Post-Migration
+
+When the restored agent boots and detects a migration note in today's daily memory, greet the user:
+> "Hi! I'm now running locally on your machine with all my memories intact. The old cloud instance is still online if you need it."
+
 ---
 
 ## Changelog
+
+### 2026.4.2
+- **Agent Download** — Say "download my agent" in chat to get a one-click encrypted backup with a temporary download link
+  - `agent-download-server.mjs` — Single-use token HTTP server with 15-minute auto-shutdown, CORS, secure shred
+  - `agent-download.mjs` — Export orchestrator with 3-tier URL detection, auto-passphrase, wallet opt-in, dry-run
+  - `restore-agent.sh` — Self-contained restore installer (980 lines): auto-deps, streaming decryption, config adaptation, Docker-to-Docker migration, wallet restore, service setup
+- **Installer dependencies** — `age`, `zstd`, `jq` now auto-installed by `install.sh` (macOS via Homebrew, Linux via apt/dnf/pacman/apk)
+- **Dockerfile** — Added `age` and `zstd` to Docker image for backup/restore support
 
 ### 2026.3.31
 - **Backup & Restore System** — Full disaster recovery with AGE-encrypted backups
