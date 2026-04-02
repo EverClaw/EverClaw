@@ -385,6 +385,20 @@ if jq . "$CONFIG_FILE" > /dev/null 2>&1; then
   fi
 fi
 
+# ─── Security Tier: Apply exec approval settings ────────────────────────────
+# Reads EVERCLAW_SECURITY_TIER env var (default: recommended).
+# Writes tools.exec.ask + safeBins + strictInlineEval into openclaw.json.
+
+SECURITY_TIER="${EVERCLAW_SECURITY_TIER:-recommended}"
+TIER_SCRIPT="${SKILLS_DIR}/scripts/security-tier.mjs"
+
+if [ -f "$TIER_SCRIPT" ]; then
+  echo "🔒 Applying security tier: ${SECURITY_TIER}"
+  node "$TIER_SCRIPT" --tier "$SECURITY_TIER" --apply --force 2>&1 | grep -E '✅|❌|⚠️|Tier|ask|safeBins' || true
+else
+  echo "ℹ️  Security tier script not found — using config defaults"
+fi
+
 # ─── Start Morpheus Proxy (background, only if configured) ──────────────────
 
 # Trap signals to clean up all children on exit
