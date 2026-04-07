@@ -131,6 +131,37 @@ RUN chown node:node /opt/everclaw/defaults/openclaw-default.json
 COPY --chown=node:node scripts/docker-entrypoint.sh /app/docker-entrypoint.sh
 RUN chmod +x /app/docker-entrypoint.sh
 
+# ─── Flavor Overlay ───────────────────────────────────────────────────────────
+# Build with --build-arg FLAVOR=morpheus-agent (or any flavor in templates/flavors/)
+# to bake flavor-specific files into the image at build time.
+# Flavor .md files are FINAL content (no __PLACEHOLDER__ vars) — copied directly
+# to the workspace, bypassing the template system. The entrypoint's scaffold step
+# checks `if [ ! -f "$target" ]` so pre-populated files are never overwritten.
+# Flavor config replaces the generic default config entirely ("replace" strategy).
+# If no flavor config exists, the generic default is preserved.
+
+ARG FLAVOR=
+RUN FDIR="/home/node/.openclaw/workspace/skills/everclaw/templates/flavors/${FLAVOR}"; \
+    if [ -n "${FLAVOR}" ] && [ -d "${FDIR}" ]; then \
+      # Copy flavor .md files directly to workspace (final content, not templates) \
+      for f in "${FDIR}"/*.md; do \
+        [ -f "$f" ] && cp "$f" /home/node/.openclaw/workspace/ ; \
+      done; \
+      # Replace default config if flavor has one \
+      FLAVOR_CFG=$(find "${FDIR}" -name 'openclaw-config-*.json' -type f | head -1); \
+      if [ -n "${FLAVOR_CFG}" ]; then \
+        cp "${FLAVOR_CFG}" /opt/everclaw/defaults/openclaw-default.json; \
+        echo "   Config: $(basename ${FLAVOR_CFG})"; \
+      else \
+        echo "   Config: generic default (no flavor config found)"; \
+      fi; \
+      # Fix ownership — RUN executes as root, runtime user is node \
+      chown -R node:node /home/node/.openclaw/workspace/; \
+      echo "🎨 Flavor applied: ${FLAVOR}"; \
+    else \
+      echo "🔧 Generic EverClaw (no flavor)"; \
+    fi
+
 # ─── Environment ──────────────────────────────────────────────────────────────
 
 ARG EVERCLAW_VERSION=2026.4.7.0355
