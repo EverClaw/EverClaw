@@ -315,6 +315,7 @@ When a session ends, your MOR comes back. Open a new session with the same token
 - **ETH or USDC on Base** — to swap for MOR tokens
 - **macOS or Linux** — macOS Keychain or libsecret for native key storage; encrypted file fallback works everywhere
 - **age, zstd, jq** — for backup/restore features (auto-installed by `install.sh`)
+- **node-llama-cpp** — for local memory search embeddings (auto-installed by `setup.mjs` and `install.sh`)
 
 That's it. No external accounts. No API keys. No subscriptions.
 

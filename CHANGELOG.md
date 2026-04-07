@@ -2,6 +2,23 @@
 
 All notable changes to EverClaw are documented here.
 
+## [UNRELEASED] — Local Embeddings Fix (node-llama-cpp)
+
+### Fixed
+- **Silent `memory_search` failure on all fresh installs** — OpenClaw's default `memorySearch.provider` is `"local"`, which requires `node-llama-cpp`. This optional peer dependency was never auto-installed, causing `memory_search` to silently fail for every EverClaw user. Now detected and installed automatically across all modalities.
+
+### Added
+- **`diagnose.sh` check A10** — New diagnostic check detects whether `node-llama-cpp` is installed. Reports clear fix instructions if missing.
+- **`setup.mjs` Stage 5 (Memory Search)** — Auto-installs `node-llama-cpp@3.18.1` globally during setup. Shows real-time progress. Post-install verification confirms the module loads correctly.
+- **`--skip-embeddings` flag** — New `setup.mjs` flag to skip the node-llama-cpp install (for headless/minimal installs).
+- **`install.sh` node-llama-cpp check** — Runs on every install/upgrade, catching existing users who never re-run setup.
+- **Dockerfile node-llama-cpp install** — Production Docker image now includes `node-llama-cpp@3.18.1` for container users.
+
+### Technical Notes
+- Detection uses `NODE_PATH="$(npm root -g)"` with `require.resolve()` (CJS). ESM `import()` ignores `NODE_PATH` in Node.js — `require.resolve` is the reliable cross-platform approach for global module detection.
+- All installs are non-blocking: failure gracefully degrades to remote embedding providers or no memory search.
+- Version pinned to `node-llama-cpp@3.18.1` (latest stable, matches OpenClaw's peer dependency).
+
 ## [2026.4.7.0355] - 2026-04-07 — Morpheus Agent Flavor + Docker Matrix Build
 
 ### Added

@@ -521,6 +521,7 @@ Flags:
   --template       Override OS auto-detection
   --with-ollama    Also setup local Ollama inference fallback
   --ollama-model   Override auto-detected Ollama model (e.g. gemma4:26b)
+  --skip-embeddings  Skip node-llama-cpp install (local embeddings)
   --security-tier  Set security tier (low|recommended|maximum)
   --no-security    Skip security tier prompt
 `);
@@ -549,6 +550,7 @@ const withOllama = args.includes('--with-ollama');
 const ollamaModel = getArg('--ollama-model');
 const securityTierArg = getArg('--security-tier');
 const noSecurity = args.includes('--no-security');
+const skipEmbeddings = args.includes('--skip-embeddings');
 
 // ─── Stage 1: Template Discovery ───────────────────────────────
 
@@ -776,6 +778,56 @@ if (applyMode) {
       console.log('  Or re-run with --restart to do it automatically.\n');
     }
   }
+  // ─── Stage 5: Memory Search (Local Embeddings) ────────────────
+
+  if (skipEmbeddings) {
+    console.log('\n  ─── Memory Search (Local Embeddings) ────────────────────');
+    console.log('  ⏭️  Skipped (--skip-embeddings)');
+  } else {
+    console.log('\n  ─── Memory Search (Local Embeddings) ────────────────────');
+    let npmGlobalRoot = '';
+    try {
+      npmGlobalRoot = execSync('npm root -g', { encoding: 'utf-8', timeout: 5000 }).trim();
+    } catch {
+      // npm root -g failed — fall through to install path (safe)
+    }
+    try {
+      execSync('node -e "try { require.resolve(\'node-llama-cpp\'); process.exit(0) } catch { process.exit(1) }"', {
+        timeout: 10000,
+        stdio: 'pipe',
+        env: { ...process.env, NODE_PATH: npmGlobalRoot },
+      });
+      console.log('  ✅ node-llama-cpp already installed');
+    } catch {
+      console.log('  📦 Installing local embedding engine (node-llama-cpp@3.18.1)...');
+      console.log('     One-time install, ~30-90s. May need build tools on some systems.');
+      try {
+        execSync('npm install -g node-llama-cpp@3.18.1', {
+          timeout: 120000,
+          stdio: 'inherit',
+        });
+        // Post-install verification
+        try {
+          execSync('node -e "try { require.resolve(\'node-llama-cpp\'); process.exit(0) } catch { process.exit(1) }"', {
+            timeout: 10000,
+            stdio: 'pipe',
+            env: { ...process.env, NODE_PATH: npmGlobalRoot },
+          });
+          console.log('  ✅ node-llama-cpp installed — local memory search enabled');
+        } catch {
+          console.log('  ⚠️  node-llama-cpp installed but import failed');
+          console.log('     You may need build tools: Xcode CLT (macOS) or build-essential (Linux)');
+          console.log('     Memory search will fall back to remote provider if configured');
+        }
+      } catch {
+        console.log('  ⚠️  node-llama-cpp install failed (not critical)');
+        console.log('     Memory search will use remote provider or be unavailable');
+        console.log('     Install manually: npm install -g node-llama-cpp@3.18.1');
+        console.log('     If build fails, you may need: Xcode CLT (macOS) or build-essential + cmake (Linux)');
+      }
+    }
+  }
+
 } else {
   // Dry-run — but still allow --test
   if (testMode) {

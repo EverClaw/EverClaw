@@ -293,6 +293,18 @@ print(count)
   elif [[ "$non_streaming" -eq 0 ]]; then
     pass "All models have streaming enabled"
   fi
+
+  # A10: Is node-llama-cpp installed for local embeddings (memory_search)?
+  if command -v node &>/dev/null; then
+    if NODE_PATH="$(npm root -g 2>/dev/null)" node -e "try { require.resolve('node-llama-cpp'); process.exit(0) } catch { process.exit(1) }" 2>/dev/null; then
+      pass "Local embeddings available (node-llama-cpp installed)"
+    else
+      warn "node-llama-cpp not installed — memory_search (local embeddings) will not work"
+      fix "Install it: npm install -g node-llama-cpp@3.18.1"
+      fix "Or set memorySearch.provider to 'openai', 'gemini', or 'voyage' in openclaw.json"
+      fix "Memory search works without this, but only with a remote embedding provider"
+    fi
+  fi
 }
 
 # ═════════════════════════════════════════════════════════════════════════════

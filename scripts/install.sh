@@ -424,6 +424,31 @@ else
   echo "⚠️  npm not found. Install Node.js, then run: cd $EVERCLAW_ROOT && npm install"
 fi
 
+# --- Ensure node-llama-cpp for OpenClaw local embeddings ---
+if command -v npm &>/dev/null && command -v node &>/dev/null; then
+  echo "🧠 Checking local embeddings (node-llama-cpp)..."
+  NPM_GLOBAL_ROOT="$(npm root -g 2>/dev/null)"
+  if NODE_PATH="$NPM_GLOBAL_ROOT" node -e "try { require.resolve('node-llama-cpp'); process.exit(0) } catch { process.exit(1) }" 2>/dev/null; then
+    echo "  ✅ node-llama-cpp already installed"
+  else
+    echo "  📦 Installing local embedding engine (node-llama-cpp@3.18.1)..."
+    echo "     One-time install, ~30-90s. May need build tools on some systems."
+    if npm install -g node-llama-cpp@3.18.1; then
+      # Post-install verification
+      if NODE_PATH="$NPM_GLOBAL_ROOT" node -e "try { require.resolve('node-llama-cpp'); process.exit(0) } catch { process.exit(1) }" 2>/dev/null; then
+        echo "  ✅ node-llama-cpp installed — local memory search enabled"
+      else
+        echo "  ⚠️  node-llama-cpp installed but import failed"
+        echo "     You may need build tools: Xcode CLT (macOS) or build-essential (Linux)"
+      fi
+    else
+      echo "  ⚠️  node-llama-cpp install failed (not critical)"
+      echo "     Install manually: npm install -g node-llama-cpp@3.18.1"
+      echo "     If build fails, you may need: Xcode CLT (macOS) or build-essential + cmake (Linux)"
+    fi
+  fi
+fi
+
 # --- Bootstrap EverClaw Key (GLM-5 Starter Access) ---
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

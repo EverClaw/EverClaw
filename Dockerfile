@@ -105,6 +105,12 @@ WORKDIR /app
 # Copy built OpenClaw from stage 1
 COPY --from=openclaw-builder --chown=node:node /openclaw /app
 
+# Install node-llama-cpp for local embeddings (optional peer dep of OpenClaw).
+# Without this, memory_search silently fails on all fresh installs.
+# Uses --no-save to avoid modifying package.json; || true so build doesn't
+# fail if native compilation fails on some architectures.
+RUN cd /app && npm install node-llama-cpp@3.18.1 --no-save 2>&1 || true
+
 # Copy EverClaw skill into the workspace
 COPY --from=openclaw-builder --chown=node:node /everclaw-skill /home/node/.openclaw/workspace/skills/everclaw
 
