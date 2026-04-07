@@ -85,11 +85,12 @@ get_model_context_window() {
 }
 
 # Get input modalities by model
+# Note: Gemma 4 E2B/E4B models support "audio" natively, but OpenClaw's
+# config validator currently only allows ["text", "image"]. We cap all models
+# to ["text", "image"] until the validator is updated.
 get_model_input_modalities() {
   local model="$1"
   case "$model" in
-    gemma4:e2b*|gemma4-e2b*|gemma4:e4b*|gemma4-e4b*) echo '["text", "image", "audio"]' ;;
-    gemma4:26b*|gemma4-26b*|gemma4:31b*|gemma4-31b*) echo '["text", "image"]' ;;
     *) echo '["text", "image"]' ;;
   esac
 }

@@ -2,6 +2,26 @@
 
 All notable changes to EverClaw are documented here.
 
+## [2026.4.7.1833] - 2026-04-07 — Ollama Input Modalities Fix
+
+### Fixed
+- **Gateway startup failure on fresh installs and upgrades** — OpenClaw's config validator only allows `["text", "image"]` in model `input` arrays. EverClaw templates and `setup-ollama.sh` were generating `["text", "image", "audio"]` for Gemma 4 E2B/E4B (which natively support audio), causing the gateway to reject the config and fail to start. Now all input arrays are capped to `["text", "image"]` until OpenClaw adds audio support.
+
+### Added
+- **Model input modality migration** — `setup.mjs` now sanitizes all provider model `input` arrays at apply time, removing unsupported values like `"audio"`. Defensive migration runs on all providers (not just Ollama) for future-proofing.
+- **A11 diagnostic check** — `diagnose.sh` now detects unsupported input modalities and suggests running `setup.mjs --apply` to auto-fix.
+
+### Changed
+- **`templates/openclaw-config-mac.json`** — Ollama model input: `["text", "image", "audio"]` → `["text", "image"]`
+- **`templates/openclaw-config-linux.json`** — Same
+- **`scripts/setup-ollama.sh`** — `get_model_input_modalities()` now returns `["text", "image"]` for all models (E2B/E4B/26B/31B) with comment explaining OpenClaw validator limitation
+- **Comment updated** — `_comment` in templates dropped "Vision + audio" to "Vision enabled where supported"
+
+### Technical Notes
+- Root cause: OpenClaw recently tightened the config schema for `models[].input` to only allow `"text"` and `"image"`. EverClaw templates were ahead of the validator (Gemma 4 E2B/E4B do support audio natively), but the mismatch caused gateway rejections.
+- Migration is defensive: strips any value not in `{"text", "image"}` across ALL providers, not just Ollama.
+- Silent no-op if config is already valid (no write, no log message).
+
 ## [2026.4.7.1756] - 2026-04-07 — Local Embeddings Fix (node-llama-cpp)
 
 ### Fixed

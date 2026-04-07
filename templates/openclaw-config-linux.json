@@ -81,7 +81,7 @@
         ]
       },
       "ollama": {
-        "_comment": "Local Ollama inference fallback. Run 'bash scripts/setup-ollama.sh --apply' to auto-detect your RAM/GPU and install the optimal Gemma 4 model (E2B/E4B/26B/31B). Vision + audio enabled where supported.",
+        "_comment": "Local Ollama inference fallback. Run 'bash scripts/setup-ollama.sh --apply' to auto-detect your RAM/GPU and install the optimal Gemma 4 model (E2B/E4B/26B/31B). Vision enabled where supported.",
         "baseUrl": "http://127.0.0.1:11434/v1",
         "api": "ollama",
         "models": [
@@ -91,8 +91,7 @@
             "reasoning": false,
             "input": [
               "text",
-              "image",
-              "audio"
+              "image"
             ],
             "cost": {
               "input": 0,
