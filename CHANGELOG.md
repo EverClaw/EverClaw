@@ -2,7 +2,7 @@
 
 All notable changes to EverClaw are documented here.
 
-## [UNRELEASED] — Local Embeddings Fix (node-llama-cpp)
+## [2026.4.7.1756] - 2026-04-07 — Local Embeddings Fix (node-llama-cpp)
 
 ### Fixed
 - **Silent `memory_search` failure on all fresh installs** — OpenClaw's default `memorySearch.provider` is `"local"`, which requires `node-llama-cpp`. This optional peer dependency was never auto-installed, causing `memory_search` to silently fail for every EverClaw user. Now detected and installed automatically across all modalities.
