@@ -2,6 +2,22 @@
 
 All notable changes to EverClaw are documented here.
 
+## [2026.4.7.0355] - 2026-04-07 — Morpheus Agent Flavor + Docker Matrix Build
+
+### Added
+- **Morpheus Agent flavor (#29)** — New EverClaw flavor for decentralized AI inference powered by MorpheusAI. Includes SOUL.md (10 Morpheus principles), IDENTITY.md, USER.md (MOR holder fields), README.md, and `openclaw-config-morpheus.json` (pure Morpheus P2P + Ollama, no centralized APIs). Chain: Base (Ethereum L2).
+- **Docker per-flavor images** — Every flavor now builds its own Docker image via GitHub Actions matrix strategy. Dynamic discovery scans `templates/flavors/` automatically — zero maintenance when adding new flavors.
+  - Generic: `docker pull ghcr.io/everclaw/everclaw:latest`
+  - Morpheus: `docker pull ghcr.io/everclaw/morpheus-agent:latest`
+  - Any flavor: `docker pull ghcr.io/everclaw/<flavor>:latest`
+- **Dockerfile `FLAVOR` build arg** — `docker build --build-arg FLAVOR=morpheus-agent .` bakes flavor-specific files into the image at build time. Flavor `.md` files are copied directly to workspace (final content, not templates). Flavor config replaces generic default.
+- **Multi-arch flavor images** — All 29 flavor images + generic built for `linux/amd64` and `linux/arm64`.
+- **Per-flavor Docker tags** — Each flavor gets both `:latest` and CalVer (e.g. `:2026.4.7.0355`) tags.
+
+### Changed
+- **CI workflow rewritten** — `docker-build.yml` now uses a two-job pipeline: discovery + matrix build. `fail-fast: false` ensures one flavor failure doesn't block others.
+- **29 flavor remotes** — `morpheus-agent` added as git remote for ecosystem-sync.
+
 ## [2026.4.6.2309] - 2026-04-06 — Installer UX fixes (Jeff tester feedback)
 
 ### Fixed
