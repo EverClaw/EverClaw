@@ -305,6 +305,29 @@ print(count)
       fix "Memory search works without this, but only with a remote embedding provider"
     fi
   fi
+
+  # A11: Do any model input arrays contain unsupported values?
+  # OpenClaw validator only allows "text" and "image". Values like "audio"
+  # (valid for Gemma 4 E2B/E4B) cause gateway startup failure.
+  if [[ -f "$OPENCLAW_CONFIG" ]]; then
+    local bad_inputs
+    bad_inputs=$(jq -r '
+      [.models.providers // {} | to_entries[] |
+       .key as $prov | .value.models // [] | .[] |
+       .input // [] | .[] |
+       select(. != "text" and . != "image") |
+       $prov + ": " + .] | unique | .[]
+    ' "$OPENCLAW_CONFIG" 2>/dev/null)
+    if [[ -n "$bad_inputs" ]]; then
+      fail "Unsupported model input modalities found (gateway will reject these):"
+      while IFS= read -r line; do
+        fix "  $line"
+      done <<< "$bad_inputs"
+      fix "Run: node scripts/setup.mjs --apply (auto-sanitizes input modalities)"
+    else
+      pass "All model input modalities valid (text/image only)"
+    fi
+  fi
 }
 
 # ═════════════════════════════════════════════════════════════════════════════

@@ -679,6 +679,37 @@ if (applyMode) {
     console.log(`  ⚠️  Ollama migration check failed (not fatal): ${e.message}`);
   }
 
+  // ─── Model Input Modality Sanitization ─────────────────────────────
+  // OpenClaw's config validator only allows "text" and "image" in model
+  // input arrays. Gemma 4 E2B/E4B support "audio" natively, but the
+  // validator rejects it — causing gateway startup failure on fresh
+  // installs and upgrades. Strip unsupported values defensively across
+  // ALL providers (not just Ollama) to future-proof.
+  try {
+    const ALLOWED_INPUTS = new Set(['text', 'image']);
+    const providers = merged.models?.providers;
+    let sanitized = false;
+    if (providers && typeof providers === 'object') {
+      for (const [provId, prov] of Object.entries(providers)) {
+        if (!Array.isArray(prov.models)) continue;
+        for (const m of prov.models) {
+          if (!Array.isArray(m.input)) continue;
+          const filtered = m.input.filter(v => ALLOWED_INPUTS.has(v));
+          if (filtered.length !== m.input.length) {
+            m.input = filtered;
+            sanitized = true;
+          }
+        }
+      }
+    }
+    if (sanitized) {
+      writeFileSync(configPath, JSON.stringify(merged, null, 2) + '\n');
+      console.log('  🔧 Sanitized model input modalities (removed unsupported values like "audio")');
+    }
+  } catch (e) {
+    console.log(`  ⚠️  Input modality sanitization failed (not fatal): ${e.message}`);
+  }
+
   // ─── Stage 4: Security Tier ───────────────────────────────────────
 
   if (!noSecurity) {
