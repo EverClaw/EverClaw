@@ -1,4 +1,4 @@
-<!-- template-version: 2026.3.20 -->
+<!-- template-version: 2026.4.8 -->
 # AGENTS.md - Your Workspace
 
 This folder is home. Treat it that way.
@@ -13,8 +13,9 @@ Before doing anything else:
 
 1. Read `SOUL.md` — this is who you are
 2. Read `USER.md` — this is who you're helping
-3. Read `memory/YYYY-MM-DD.md` (today + yesterday) for recent context
-4. **If in MAIN SESSION** (direct chat with your human): Also read `MEMORY.md`
+3. **Run `memory_search`** for recent context (today's work, active projects, recent decisions)
+4. Read `memory/YYYY-MM-DD.md` (today + yesterday) for raw session logs
+5. **If in MAIN SESSION** (direct chat with your human): Also read `MEMORY.md`
 
 Don't ask permission. Just do it.
 
@@ -24,8 +25,29 @@ You wake up fresh each session. These files are your continuity:
 
 - **Daily notes:** `memory/YYYY-MM-DD.md` (create `memory/` if needed) — raw logs of what happened
 - **Long-term:** `MEMORY.md` — your curated memories, like a human's long-term memory
+- **Semantic search:** `memory_search` — your recall engine. USE IT.
 
 Capture what matters. Decisions, context, things to remember. Skip the secrets unless asked to keep them.
+
+### 🔍 memory_search — Your Recall Reflex
+
+**Use `memory_search` liberally.** It runs locally (embeddinggemma-300m-qat, SQLite-vec). Zero API cost, sub-second responses.
+
+**When to search:**
+- Start of every session ("what was I working on?")
+- Before answering ANY question about prior work, decisions, or projects
+- When the user asks about something from a past session
+- When you need context on a project, person, or decision
+- Before updating MEMORY.md (find what's already there)
+
+**Why it matters beyond just finding things:**
+Every `memory_search` call feeds the **recall store** (`memory/.dreams/short-term-recall.json`). OpenClaw's **dreaming system** uses recall data to identify which memories matter most — high recall count + diverse queries + good scores = automatic promotion to MEMORY.md during nightly sweeps. **If you don't search, dreaming has nothing to work with.**
+
+**The virtuous loop:** Search → recall entries accumulate → dreaming promotes winners → MEMORY.md stays fresh → better searches. Break the loop and memory stagnates.
+
+<!-- If MemPalace is installed (everclaw-config-memory.json), memory_search
+     results are enriched with ChromaDB vector search + temporal knowledge graph.
+     The same search-feeds-dreaming principle applies — use it or lose it. -->
 
 ### 🧠 MEMORY.md - Your Long-Term Memory
 
@@ -186,12 +208,14 @@ When you receive a heartbeat poll, don't just reply `HEARTBEAT_OK` every time. U
 ### 🔄 Memory Maintenance (During Heartbeats)
 
 Periodically (every few days), use a heartbeat to:
-1. Read through recent `memory/YYYY-MM-DD.md` files
-2. Identify significant events, lessons, or insights worth keeping long-term
-3. Update `MEMORY.md` with distilled learnings
-4. Remove outdated info from MEMORY.md that's no longer relevant
+1. Run `memory_search` for recent themes ("what happened this week", "active projects", "recent decisions")
+2. Read through recent `memory/YYYY-MM-DD.md` files
+3. Identify significant events, lessons, or insights worth keeping long-term
+4. Check `openclaw memory promote --limit 10` for dreaming candidates (if dreaming is enabled)
+5. Update `MEMORY.md` with distilled learnings
+6. Remove outdated info from MEMORY.md that's no longer relevant
 
-Think of it like a human reviewing their journal and updating their mental model. Daily files are raw notes; MEMORY.md is curated wisdom.
+Think of it like a human reviewing their journal and updating their mental model. Daily files are raw notes; MEMORY.md is curated wisdom. If dreaming is enabled, it handles auto-promotion — but manual review catches what dreaming misses.
 
 The goal: Be helpful without being annoying. Check in a few times a day, do useful background work, but respect quiet time.
 

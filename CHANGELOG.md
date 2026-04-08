@@ -5,6 +5,7 @@ All notable changes to EverClaw are documented here.
 ## [2026.4.8] - 2026-04-08 — MemPalace Enhanced Memory
 
 ### Added
+- **memory_search best practices in agent templates** — `AGENTS.template.md` now includes session-start search step, "Recall Reflex" guide explaining the search → dreaming → promotion virtuous loop, and updated memory maintenance routine with `openclaw memory promote`. `SOUL.template.md` adds "Search before you speak" as a core truth. Both bumped to template-version 2026.4.8.
 - **MemPalace memory backend** — Optional upgrade layering ChromaDB vector search + temporal knowledge graph on top of OpenClaw's built-in `memory_search`. Dual embedding models (embeddinggemma-300m-qat 300M + all-MiniLM-L6-v2 22M) catch different semantic matches.
 - **Python bridge** (`scripts/python/mempalace_bridge.py`) — JSON contract between Node.js and MemPalace SDK v3.0.0 via spawn(). Supports search, mine, wake-up, status, init, as-of, and export commands. Full stdout suppression preserves JSON contract.
 - **Shared bridge utility** (`scripts/lib/bridge-call.mjs`) — Single source of truth for Python bridge communication. Configurable `rejectOnError` for strict vs graceful degradation modes.
