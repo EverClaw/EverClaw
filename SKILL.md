@@ -1,6 +1,6 @@
 ---
 name: everclaw
-version: 2026.4.8.1910
+version: 2026.4.9.1353
 description: Open-source first AI inference — GLM-5 as default, Claude as fallback only. Own your inference forever via the [REDACTED] decentralized network. Stake MOR tokens, access GLM-5, GLM-4.7 Flash, Kimi K2.5, and 30+ models with persistent inference by recycling staked MOR. Open-source first model router routes all tiers to [REDACTED] by default — Claude only kicks in as an escape hatch when needed. Includes [REDACTED] API Gateway bootstrap for zero-config startup, OpenAI-compatible proxy with auto-session management, automatic retry with fresh sessions, OpenAI-compatible error classification to prevent cooldown cascades, multi-key auth rotation v2 with proactive DIEM balance monitoring and reactive 402 watchdog, Gateway Guardian v5 with direct curl inference probes (eliminates Signal spam), proactive Venice DIEM credit monitoring, circuit breaker for stuck sub-agents, nuclear self-healing restart, always-on proxy-router with launchd auto-restart, smart session archiver, three-shift cyclic execution engine (v2 with 15-minute execution loops), 24/7 always-on power configuration for macOS, bundled security skills, zero-dependency wallet management via macOS Keychain, x402 payment client for agent-to-agent USDC payments, ERC-8004 agent registry reader for discovering trustless agents on Base, and hardware-aware local Ollama fallback with auto model selection (Gemma 4 family: E2B/E4B/26B/31B with vision + audio, based on available RAM/GPU).
 homepage: https://everclaw.com
 metadata:
@@ -2475,7 +2475,7 @@ backup.tar.zst.age (AGE encrypted)
   "components": ["openclaw", "morpheus", "everclaw"],
   "sizes": { "openclaw": 5242880, "morpheus": 1048576, "everclaw": 4096 },
   "checksums": { "openclaw": "sha256:...", "morpheus": "sha256:..." },
-  "versions": { "openclaw": "2026.4.8", "everclaw": "2026.4.8.1910" }
+  "versions": { "openclaw": "2026.4.9", "everclaw": "2026.4.9.1353" }
 }
 ```
 
@@ -2748,6 +2748,12 @@ MemPalace stores data locally in `~/.mempalace/`. Exported vaults may contain PI
 ---
 
 ## Changelog
+
+### 2026.4.9.1353
+- **OpenClaw pin** v2026.4.8 → v2026.4.9 — Dreaming REM backfill, agent idle timeout fix, npm packaging, security hardening
+
+### 2026.4.9
+- **Docker channel plugin fix** (Issue #17) — postinstall-bundled-plugins.mjs skip workaround for git clone builds
 
 ### 2026.4.8
 - **MemPalace Enhanced Memory** — ChromaDB vector search + temporal KG + Obsidian export
