@@ -108,6 +108,8 @@ detect_os() {
   case "$(uname -s)" in
     Darwin) echo "macos" ;;
     Linux)  echo "linux" ;;
+    MINGW*|MSYS*|CYGWIN*)
+            die "Unsupported OS: $(uname -s). EverClaw requires macOS or Linux. Windows (Git Bash / MSYS / Cygwin) is not supported. Please install WSL 2: https://learn.microsoft.com/en-us/windows/wsl/install" 2 ;;
     *)      die "Unsupported OS: $(uname -s). Only macOS and Linux are supported." 2 ;;
   esac
 }
@@ -745,8 +747,8 @@ install_services() {
   # Install OpenClaw if not present
   if ! command -v openclaw &>/dev/null; then
     log "Installing OpenClaw..."
-    curl -fsSL https://get.openclaw.ai | bash 2>/dev/null || {
-      warn "OpenClaw auto-install failed. Install manually: https://get.openclaw.ai"
+    curl -fsSL https://openclaw.ai/install.sh | bash -s -- --install-method git 2>/dev/null || {
+      warn "OpenClaw auto-install failed. Install manually: curl -fsSL https://openclaw.ai/install.sh | bash -s -- --install-method git"
       return 0
     }
   fi

@@ -30,7 +30,14 @@ ARCH=$(uname -m)
 case "$OS" in
   darwin) PLATFORM="darwin" ;;
   linux)  PLATFORM="linux" ;;
-  *)      echo "ERROR:Unsupported OS: $OS"; exit 1 ;;
+  mingw*|msys*|cygwin*)
+          echo "ERROR: Unsupported OS: $OS"
+          echo "EverClaw requires macOS or Linux."
+          echo "Windows (Git Bash / MSYS / Cygwin) is not supported."
+          echo "Please install WSL 2 and run the installer inside WSL:"
+          echo "  → https://learn.microsoft.com/en-us/windows/wsl/install"
+          exit 1 ;;
+  *)      echo "ERROR: Unsupported OS: $OS"; exit 1 ;;
 esac
 
 case "$ARCH" in

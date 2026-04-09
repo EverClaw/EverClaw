@@ -60,12 +60,14 @@ node ~/.openclaw/workspace/skills/everclaw/scripts/setup.mjs --key <API_KEY> --a
 
 ## Prerequisites
 
+**Supported platforms:** macOS, Linux, Windows via WSL 2. Native Windows (Git Bash, MSYS, Cygwin) is not supported.
+
 | Dependency | How to Install | Required For |
 |------------|----------------|--------------|
 | **Homebrew** (macOS) | `/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"` | Package manager |
 | **Node.js** (v18+) | `brew install node` | Bootstrap scripts, proxy |
 | **Git** | `brew install git` | Skill installation |
-| **OpenClaw** | `curl -fsSL https://get.openclaw.ai \| bash` | Agent runtime |
+| **OpenClaw** | `curl -fsSL https://openclaw.ai/install.sh \| bash -s -- --install-method git` | Agent runtime |
 
 ### Optional Dependencies
 
@@ -130,7 +132,7 @@ brew install node
 
 Install OpenClaw:
 ```bash
-curl -fsSL https://get.openclaw.ai | bash
+curl -fsSL https://openclaw.ai/install.sh | bash -s -- --install-method git
 ```
 
 ### "Permission denied"

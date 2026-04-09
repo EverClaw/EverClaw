@@ -219,6 +219,12 @@ detect_os() {
   case "$OS" in
     darwin) PLATFORM="macos" ;;
     linux)  PLATFORM="linux" ;;
+    mingw*|msys*|cygwin*)
+            log_err "Unsupported OS: $OS"
+            log_err "EverClaw requires macOS or Linux."
+            log_err "Windows (Git Bash / MSYS / Cygwin) is not supported."
+            log_err "Please install WSL 2: https://learn.microsoft.com/en-us/windows/wsl/install"
+            exit 1 ;;
     *)      log_err "Unsupported OS: $OS"; exit 1 ;;
   esac
   

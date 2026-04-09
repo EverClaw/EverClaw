@@ -143,6 +143,14 @@ case "$OS" in
       PACKAGE_MANAGER="unknown"
     fi
     ;;
+  MINGW*|MSYS*|CYGWIN*)
+    log_err "Unsupported OS: $OS"
+    log "EverClaw requires macOS or Linux."
+    log "Windows (Git Bash / MSYS / Cygwin) is not supported."
+    log "Please install WSL 2 and run the installer inside WSL:"
+    log "  → https://learn.microsoft.com/en-us/windows/wsl/install"
+    exit 1
+    ;;
   *)
     log_err "Unsupported OS: $OS"
     log "EverClaw requires macOS or Linux."
