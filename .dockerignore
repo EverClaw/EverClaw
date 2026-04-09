@@ -25,3 +25,7 @@ templates/*.plist
 .clawhubignore
 CLAWHUB_WARNING.md
 build-and-push.sh
+
+# Memory / sensitive data
+MEMORY.md
+memory/

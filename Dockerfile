@@ -73,6 +73,13 @@ RUN pnpm build
 ENV OPENCLAW_PREFER_PNPM=1
 RUN pnpm ui:build
 
+# Install runtime deps for all bundled OpenClaw channel plugins.
+# postinstall-bundled-plugins.mjs skips source checkouts (detects src/ + extensions/),
+# so we remove these build-only artifacts first (also shrinks final image ~100 MB).
+RUN rm -rf ./src ./extensions && \
+    NODE_ENV=production node ./scripts/postinstall-bundled-plugins.mjs && \
+    npm cache clean --force
+
 # ─── Stage 2: Production Image ───────────────────────────────────────────────
 
 FROM node:22-bookworm-slim AS production
