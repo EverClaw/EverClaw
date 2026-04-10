@@ -1,17 +1,17 @@
 ---
-name: everclaw
-version: 2026.4.9.1353
-description: Open-source first AI inference — GLM-5 as default, Claude as fallback only. Own your inference forever via the [REDACTED] decentralized network. Stake MOR tokens, access GLM-5, GLM-4.7 Flash, Kimi K2.5, and 30+ models with persistent inference by recycling staked MOR. Open-source first model router routes all tiers to [REDACTED] by default — Claude only kicks in as an escape hatch when needed. Includes [REDACTED] API Gateway bootstrap for zero-config startup, OpenAI-compatible proxy with auto-session management, automatic retry with fresh sessions, OpenAI-compatible error classification to prevent cooldown cascades, multi-key auth rotation v2 with proactive DIEM balance monitoring and reactive 402 watchdog, Gateway Guardian v5 with direct curl inference probes (eliminates Signal spam), proactive Venice DIEM credit monitoring, circuit breaker for stuck sub-agents, nuclear self-healing restart, always-on proxy-router with launchd auto-restart, smart session archiver, three-shift cyclic execution engine (v2 with 15-minute execution loops), 24/7 always-on power configuration for macOS, bundled security skills, zero-dependency wallet management via macOS Keychain, x402 payment client for agent-to-agent USDC payments, ERC-8004 agent registry reader for discovering trustless agents on Base, and hardware-aware local Ollama fallback with auto model selection (Gemma 4 family: E2B/E4B/26B/31B with vision + audio, based on available RAM/GPU).
-homepage: https://everclaw.com
+name: morpheus-skill
+version: 2026.4.10
+description: Decentralized AI inference for any agent platform. GLM-5, Gemma 4, GLM-4.7-flash, 30+ models via staked MOR tokens. Own your inference, not rent it. Works with OpenClaw, Hermes Agent, IronClaw, NanoClaw, and any platform that supports agentskills.io format. OpenAI-compatible proxy sidecar with Gateway Guardian v5, three-shift task planning, smart session archiver, multi-key auth rotation, hardware-aware local Ollama fallback, and zero-dependency wallet management.
+homepage: https://MorpheusSkill.com
 metadata:
   openclaw:
-    emoji: "♾️"
+    emoji: "🟢"
     requires:
       bins: ["curl", "node"]
       env:
         - name: WALLET_PRIVATE_KEY
           optional: true
-          description: "[REDACTED] wallet private key — injected at runtime from 1Password or macOS Keychain. NEVER stored on disk."
+          description: "MOR wallet private key — injected at runtime from macOS Keychain. NEVER stored on disk."
         - name: ETH_NODE_ADDRESS
           optional: true
           default: "https://base-mainnet.public.blastapi.io"
@@ -24,10 +24,15 @@ metadata:
         storage: "macOS Keychain or 1Password (never on disk)"
         required: false
         description: "Required only for local P2P inference (MOR staking). Not needed for API Gateway mode."
-      - name: "[REDACTED] API Gateway Key"
+      - name: "Morpheus API Gateway Key"
         storage: "openclaw.json providers config"
         required: false
         description: "Free API key from app.mor.org. Community bootstrap key included for initial setup."
+  hermes:
+    category: inference
+    tags: [morpheus, decentralized, p2p, mor-token, open-source, staking]
+    requires_toolsets: [terminal]
+  platforms: [macos, linux, windows]
     network:
       outbound:
         - host: "api.mor.org"

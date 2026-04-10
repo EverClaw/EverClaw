@@ -16,7 +16,7 @@ jobs:
   # Dynamically builds the matrix from templates/flavors/ directory.
   # Each subdirectory name becomes a flavor entry.
   # NOTE: Flavor directory names must exactly match the intended image name
-  # (e.g. templates/flavors/morpheus-agent/ → ghcr.io/everclaw/morpheus-agent).
+  # (e.g. templates/flavors/morpheus-skill/ → ghcr.io/everclaw/morpheus-skill).
   # Adding a new flavor is zero-config: just create the directory and push.
 
   discover-flavors:

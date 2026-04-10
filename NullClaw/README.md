@@ -1,16 +1,16 @@
-# null-everclaw — EverClaw for NullClaw
+# Morpheus Skill for NullClaw
 
 Decentralized [REDACTED] inference for your [NullClaw](https://github.com/null-claw) agent.
 
-**Zero overhead integration:** NullClaw's 678 KB Zig binary, ~1 MB RAM, and <2 ms startup stay untouched. The EverClaw proxy runs as a separate Node.js sidecar and registers as a standard OpenAI-compatible provider in NullClaw's pluggable vtable system.
+**Zero overhead integration:** NullClaw's 678 KB Zig binary, ~1 MB RAM, and <2 ms startup stay untouched. The Morpheus proxy runs as a separate Node.js sidecar and registers as a standard OpenAI-compatible provider in NullClaw's pluggable vtable system.
 
 ## Architecture
 
 ```
-NullClaw (Zig, 678 KB) → EverClaw Proxy (Node.js, port 8083) → [REDACTED] P2P → AI Model
+NullClaw (Zig, 678 KB) → Morpheus Proxy (Node.js, port 8083) → [REDACTED] P2P → AI Model
 ```
 
-NullClaw supports 22+ providers via its vtable architecture. The EverClaw proxy registers as a `custom` provider — NullClaw's binary stays pure Zig with zero additional dependencies.
+NullClaw supports 22+ providers via its vtable architecture. The Morpheus proxy registers as a `custom` provider — NullClaw's binary stays pure Zig with zero additional dependencies.
 
 ## Quick Start
 
@@ -123,9 +123,9 @@ PRs welcome for:
 - Landlock/firejail sandbox configs for the proxy
 - Performance benchmarks on edge hardware
 
-## Included with EverClaw v2026.2.21
+## Included Features
 
-When you install the EverClaw proxy via `setup.sh`, you get these features automatically:
+When you install the Morpheus proxy via `setup.sh`, you get these features automatically:
 
 - **Three-Shift Task Planning** — Morning/Afternoon/Night shift system proposes prioritized task plans with approval workflow. Nothing executes without your say-so.
 - **Gateway Guardian v5** — Self-healing watchdog with direct curl inference probes, billing-aware escalation, DIEM credit monitoring, and 4-stage restart escalation. No more Signal spam from failed health checks.
@@ -133,7 +133,7 @@ When you install the EverClaw proxy via `setup.sh`, you get these features autom
 - **Model Router** — Open-source first: routes all tiers to [REDACTED] by default (GLM-5, GLM-4.7-flash). Claude only kicks in as a fallback.
 - **Multi-Key Auth Rotation** — Configure multiple API keys; auto-rotates when credits drain.
 
-See the main [EverClaw README](../README.md) for full documentation.
+See the main [Morpheus Skill README](../README.md) for full documentation.
 
 ## License
 

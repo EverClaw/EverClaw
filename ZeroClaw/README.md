@@ -1,13 +1,13 @@
-# zero-everclaw — EverClaw for ZeroClaw
+# Morpheus Skill for ZeroClaw
 
 Decentralized [REDACTED] inference for your [ZeroClaw](https://github.com/zero-claw) agent.
 
-**Trait-compatible integration:** ZeroClaw's trait-driven provider system accepts any OpenAI-compatible endpoint via `custom:` URLs. The EverClaw proxy slots in with zero Rust code changes — just a TOML config patch.
+**Trait-compatible integration:** ZeroClaw's trait-driven provider system accepts any OpenAI-compatible endpoint via `custom:` URLs. The Morpheus proxy slots in with zero Rust code changes — just a TOML config patch.
 
 ## Architecture
 
 ```
-ZeroClaw (Rust, 8.8 MB) → EverClaw Proxy (Node.js, port 8083) → [REDACTED] P2P → AI Model
+ZeroClaw (Rust, 8.8 MB) → Morpheus Proxy (Node.js, port 8083) → [REDACTED] P2P → AI Model
 ```
 
 ZeroClaw's <10 ms cold start, <5 MB RAM, sandboxing, and 70+ channels stay untouched.
@@ -108,9 +108,9 @@ PRs welcome for:
 - OpenRC service file
 - Sandbox (allowlist) config for proxy access
 
-## Included with EverClaw v2026.2.21
+## Included Features
 
-When you install the EverClaw proxy via `setup.sh`, you get these features automatically:
+When you install the Morpheus proxy via `setup.sh`, you get these features automatically:
 
 - **Three-Shift Task Planning** — Morning/Afternoon/Night shift system proposes prioritized task plans with approval workflow. Nothing executes without your say-so.
 - **Gateway Guardian v5** — Self-healing watchdog with direct curl inference probes, billing-aware escalation, DIEM credit monitoring, and 4-stage restart escalation. No more Signal spam from failed health checks.
@@ -118,7 +118,7 @@ When you install the EverClaw proxy via `setup.sh`, you get these features autom
 - **Model Router** — Open-source first: routes all tiers to [REDACTED] by default (GLM-5, GLM-4.7-flash). Claude only kicks in as a fallback.
 - **Multi-Key Auth Rotation** — Configure multiple API keys; auto-rotates when credits drain.
 
-See the main [EverClaw README](../README.md) for full documentation.
+See the main [Morpheus Skill README](../README.md) for full documentation.
 
 ## License
 

@@ -10,8 +10,8 @@ and branding.
 # Generic EverClaw (default)
 docker pull ghcr.io/everclaw/everclaw:latest
 
-# Morpheus Agent (decentralized AI inference)
-docker pull ghcr.io/everclaw/morpheus-agent:latest
+# Morpheus Skill (decentralized AI inference)
+docker pull ghcr.io/everclaw/morpheus-skill:latest
 
 # Any flavor
 docker pull ghcr.io/everclaw/<flavor>:latest
@@ -27,7 +27,7 @@ docker run -d \
   -v ~/.morpheus:/home/node/.morpheus \
   -v ~/.everclaw:/home/node/.everclaw \
   --name my-agent \
-  ghcr.io/everclaw/morpheus-agent:latest
+  ghcr.io/everclaw/morpheus-skill:latest
 ```
 
 Then open: `http://localhost:18789`
@@ -41,7 +41,7 @@ customizes the agent persona (SOUL.md, IDENTITY.md), user template
 | Image | Description |
 |-------|-------------|
 | `everclaw/everclaw` | Generic EverClaw (default) |
-| `everclaw/morpheus-agent` | Decentralized AI via MorpheusAI (Base L2) |
+| `everclaw/morpheus-skill` | Decentralized AI via MorpheusAI (Base L2) |
 | `everclaw/baseclaw` | Base L2 focused agent |
 | `everclaw/bitcoinclaw` | Bitcoin ecosystem agent |
 | `everclaw/ethereumclaw` | Ethereum ecosystem agent |
@@ -60,7 +60,7 @@ Each flavor has a directory in `templates/flavors/<name>/` containing
 override files:
 
 ```
-templates/flavors/morpheus-agent/
+templates/flavors/morpheus-skill/
 ├── SOUL.md                        # Agent persona
 ├── IDENTITY.md                    # Agent identity
 ├── USER.md                        # User template
@@ -69,7 +69,7 @@ templates/flavors/morpheus-agent/
 └── openclaw-config-morpheus.json  # Model & inference config
 ```
 
-When Docker builds with `--build-arg FLAVOR=morpheus-agent`:
+When Docker builds with `--build-arg FLAVOR=morpheus-skill`:
 
 1. **Flavor `.md` files** are copied directly to the workspace
    (`/home/node/.openclaw/workspace/`). These are final content —
@@ -93,7 +93,7 @@ The GitHub Actions workflow uses a two-job pipeline:
 ┌──────────────────┐     ┌──────────────────────────────────┐
 │ discover-flavors │────▶│ build-and-push (matrix: 30 jobs) │
 │  (ls + jq)       │     │  - generic (no flavor)           │
-│  ~3 seconds      │     │  - morpheus-agent                │
+│  ~3 seconds      │     │  - morpheus-skill                │
 └──────────────────┘     │  - baseclaw                      │
                          │  - ... 27 more                   │
                          │  Multi-arch: amd64 + arm64       │
@@ -114,11 +114,11 @@ The GitHub Actions workflow uses a two-job pipeline:
 docker build -t my-everclaw .
 
 # Specific flavor
-docker build --build-arg FLAVOR=morpheus-agent -t my-morpheus .
+docker build --build-arg FLAVOR=morpheus-skill -t my-morpheus .
 
 # With specific EverClaw version
 docker build \
-  --build-arg FLAVOR=morpheus-agent \
+  --build-arg FLAVOR=morpheus-skill \
   --build-arg EVERCLAW_VERSION=2026.4.7.0355 \
   -t my-morpheus .
 ```
@@ -136,7 +136,7 @@ docker build \
 4. Pull: `docker pull ghcr.io/everclaw/my-flavor:latest`
 
 **Naming convention:** The directory name becomes the Docker image
-name. `templates/flavors/morpheus-agent/` → `ghcr.io/everclaw/morpheus-agent`.
+name. `templates/flavors/morpheus-skill/` → `ghcr.io/everclaw/morpheus-skill`.
 
 ## Config Strategy
 

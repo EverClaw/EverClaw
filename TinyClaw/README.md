@@ -1,4 +1,4 @@
-# tiny-everclaw — EverClaw for TinyClaw
+# Morpheus Skill for TinyClaw
 
 Decentralized [REDACTED] inference for your [TinyClaw](https://github.com/tiny-claw) multi-agent teams.
 
@@ -7,7 +7,7 @@ Decentralized [REDACTED] inference for your [TinyClaw](https://github.com/tiny-c
 ## Architecture
 
 ```
-TinyClaw (Node.js + tmux) → EverClaw Proxy (port 8083) → [REDACTED] P2P → AI Model
+TinyClaw (Node.js + tmux) → Morpheus Proxy (port 8083) → [REDACTED] P2P → AI Model
 ```
 
 TinyClaw's <100 MB footprint, file-based queue, tmux 24/7 daemon, Discord/WhatsApp/Telegram channels, and live TUI visualizer stay 100% untouched.
@@ -88,9 +88,9 @@ PRs welcome for:
 - Channel-specific optimizations
 - Performance benchmarks vs API providers
 
-## Included with EverClaw v2026.2.21
+## Included Features
 
-When you install the EverClaw proxy via `setup.sh`, you get these features automatically:
+When you install the Morpheus proxy via `setup.sh`, you get these features automatically:
 
 - **Three-Shift Task Planning** — Morning/Afternoon/Night shift system proposes prioritized task plans with approval workflow. Nothing executes without your say-so.
 - **Gateway Guardian v5** — Self-healing watchdog with direct curl inference probes, billing-aware escalation, DIEM credit monitoring, and 4-stage restart escalation. No more Signal spam from failed health checks.
@@ -98,7 +98,7 @@ When you install the EverClaw proxy via `setup.sh`, you get these features autom
 - **Model Router** — Open-source first: routes all tiers to [REDACTED] by default (GLM-5, GLM-4.7-flash). Claude only kicks in as a fallback.
 - **Multi-Key Auth Rotation** — Configure multiple API keys; auto-rotates when credits drain.
 
-See the main [EverClaw README](../README.md) for full documentation.
+See the main [Morpheus Skill README](../README.md) for full documentation.
 
 ## License
 

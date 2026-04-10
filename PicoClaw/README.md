@@ -1,13 +1,13 @@
-# pico-everclaw — EverClaw for PicoClaw
+# Morpheus Skill for PicoClaw
 
 Decentralized [REDACTED] inference for your [PicoClaw](https://github.com/pico-claw) edge device agent.
 
-**Designed for tiny hardware:** PicoClaw runs on $10 RISC-V boards, Raspberry Pi, Termux, and Docker. The EverClaw proxy runs as a separate Node.js sidecar and provides OpenAI-compatible inference to PicoClaw via standard HTTP.
+**Designed for tiny hardware:** PicoClaw runs on $10 RISC-V boards, Raspberry Pi, Termux, and Docker. The Morpheus proxy runs as a separate Node.js sidecar and provides OpenAI-compatible inference to PicoClaw via standard HTTP.
 
 ## Architecture
 
 ```
-PicoClaw (<10 MB RAM) → EverClaw Proxy (Node.js, port 8083) → [REDACTED] P2P → AI Model
+PicoClaw (<10 MB RAM) → Morpheus Proxy (Node.js, port 8083) → [REDACTED] P2P → AI Model
 ```
 
 > **Note:** The Node.js proxy needs ~80 MB RAM. On extremely constrained devices ($10 RISC-V), you may want to run the proxy on a separate host (e.g., Raspberry Pi 4 or any server) and point PicoClaw at it over the network.
@@ -92,9 +92,9 @@ PRs welcome for:
 - RISC-V testing and benchmarks
 - ARM32 compatibility patches
 
-## Included with EverClaw v2026.2.21
+## Included Features
 
-When you install the EverClaw proxy via `setup.sh`, you get these features automatically:
+When you install the Morpheus proxy via `setup.sh`, you get these features automatically:
 
 - **Three-Shift Task Planning** — Morning/Afternoon/Night shift system proposes prioritized task plans with approval workflow. Nothing executes without your say-so.
 - **Gateway Guardian v5** — Self-healing watchdog with direct curl inference probes, billing-aware escalation, DIEM credit monitoring, and 4-stage restart escalation. No more Signal spam from failed health checks.
@@ -102,7 +102,7 @@ When you install the EverClaw proxy via `setup.sh`, you get these features autom
 - **Model Router** — Open-source first: routes all tiers to [REDACTED] by default (GLM-5, GLM-4.7-flash). Claude only kicks in as a fallback.
 - **Multi-Key Auth Rotation** — Configure multiple API keys; auto-rotates when credits drain.
 
-See the main [EverClaw README](../README.md) for full documentation.
+See the main [Morpheus Skill README](../README.md) for full documentation.
 
 ## License
 

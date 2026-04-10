@@ -46,7 +46,7 @@ curl -fsSL https://get.morpheusagent.ai | bash
 ### Option 3: ClawHub
 
 ```bash
-clawhub install morpheus-agent
+clawhub install morpheus-skill
 ```
 
 ## What's Included

@@ -1,6 +1,38 @@
-# EverClaw Changelog
+# Morpheus Skill Changelog
 
-All notable changes to EverClaw are documented here.
+All notable changes to Morpheus Skill (formerly EverClaw) are documented here.
+
+## [2026.4.10] - 2026-04-10 — Morpheus Skill Rebrand
+
+### Changed
+- **Rebrand from EverClaw to Morpheus Skill** — Universal positioning for any agent platform
+- **Repo renamed** `profbernardoj/morpheus-agent` → `profbernardoj/morpheus-skill`
+- **SKILL.md** — `name: everclaw` → `name: morpheus-skill`, added Hermes Agent metadata
+- **SOUL.md** — New sovereignty-focused personality ("freedom of intelligence" mission)
+- **IDENTITY.md** — Skill identity, not agent identity ("A skill, not an agent")
+- **USER.md** — Operator template with MOR holder profile, model prefs GLM-5 / Gemma 4
+- **README.md** — Universal positioning with platform-specific install sections
+- **package.json** — `name: everclaw` → `name: morpheus-skill`
+- **Domain** — MorpheusSkill.com
+
+### Added
+- **Hermes Agent integration guide** (`docs/hermes-integration.md`)
+- **OpenClaw integration guide** (`docs/openclaw-integration.md`)
+- **Hermes metadata** in SKILL.md YAML front matter (`hermes.category`, `hermes.tags`, `hermes.requires_toolsets`)
+- **Platform compatibility table** in IDENTITY.md
+
+### Updated
+- **IronClaw/README.md** — Rebranded from "EverClaw for IronClaw" to "Morpheus Skill for IronClaw"
+- **NanoClaw/README.md** — Rebranded from "EverClaw for NanoClaw" to "Morpheus Skill for NanoClaw"
+- **Model tiers** — GLM-5 (HEAVY), Gemma 4 (STANDARD), GLM-4.7-flash (LIGHT)
+
+### Migration
+Existing `morpheus-agent` users: update git remote, rename directory, done. See README.md "Migrating from Morpheus Agent" section. All scripts, config, and services are unchanged.
+
+### Notes
+No breaking changes to the core engine. All scripts, proxy, guardian, wallet, and Docker support remain identical. Wallet and setup scripts retain their original `everclaw-` names for backward compatibility. The rebrand is positioning-only — same EverClaw engine, now framed as a universal skill for any agent platform that supports agentskills.io.
+
+---
 
 ## [2026.4.9.1353] - 2026-04-09 — OpenClaw v2026.4.9 Pin
 

@@ -1,8 +1,8 @@
 {
-  "name": "everclaw",
-  "version": "2026.4.9.1353",
+  "name": "morpheus-skill",
+  "version": "2026.4.10",
   "type": "module",
-  "description": "Open-source first AI inference via Morpheus decentralized network",
+  "description": "Decentralized AI inference for any agent platform via Morpheus network",
   "scripts": {
     "test": "node --test tests/*.mjs",
     "test:lib": "node --test tests/lib-*.mjs",
@@ -19,7 +19,10 @@
     "inference",
     "decentralized",
     "openclaw",
-    "everclaw"
+    "hermes",
+    "ironclaw",
+    "skill",
+    "mor-token"
   ],
   "license": "MIT",
   "dependencies": {

@@ -1,26 +1,26 @@
-# iron-everclaw — EverClaw for IronClaw
+# Morpheus Skill for IronClaw
 
-Decentralized [REDACTED] inference (stake MOR, never pay per token) for your [IronClaw](https://github.com/iron-claw) agent.
+Decentralized Morpheus inference (stake MOR, never pay per token) for your [IronClaw](https://github.com/iron-claw) agent.
 
 **Works out-of-the-box with IronClaw's Rig framework / OpenAI-compatible provider.**
 
 ## Architecture
 
 ```
-IronClaw Agent (Rust/Rig) → EverClaw Proxy (Node.js, port 8083) → [REDACTED] P2P Network → AI Model
+IronClaw Agent (Rust/Rig) → Morpheus Proxy (Node.js, port 8083) → Morpheus P2P Network → AI Model
 ```
 
-The EverClaw proxy runs as a standalone Node.js sidecar — completely independent of IronClaw's Rust binary. IronClaw talks to it via standard OpenAI-compatible HTTP API, which Rig's `openai` provider handles natively.
+The Morpheus proxy runs as a standalone Node.js sidecar — completely independent of IronClaw's Rust binary. IronClaw talks to it via standard OpenAI-compatible HTTP API, which Rig's `openai` provider handles natively.
 
 ## Quick Start
 
-### 1. Install the EverClaw proxy
+### 1. Install the Morpheus proxy
 
 ```bash
 bash setup.sh
 ```
 
-This installs the proxy + guardian into `~/.everclaw` and starts it as a background service.
+This installs the proxy + guardian into `~/.morpheus` and starts it as a background service.
 
 ### 2. Configure IronClaw
 
@@ -38,7 +38,7 @@ use rig::providers::openai;
 
 let client = openai::Client::from_url("http://127.0.0.1:8083/v1", "morpheus-local");
 let agent = client
-    .agent("glm-5")  // or "glm-4.7-flash", "kimi-k2.5", "qwen3-235b"
+    .agent("glm-5")  // or "glm-4.7-flash", "gemma-4", "kimi-k2.5"
     .preamble("You are a helpful assistant.")
     .build();
 ```
@@ -51,10 +51,10 @@ curl http://127.0.0.1:8083/health
 
 ### 4. Stake MOR for unlimited P2P inference (optional)
 
-The proxy works immediately via the [REDACTED] API Gateway (community-powered, free during beta). For permanent access, stake MOR tokens:
+The proxy works immediately via the Morpheus API Gateway (community-powered). For permanent access, stake MOR tokens:
 
 ```bash
-cd ~/.everclaw
+cd ~/.morpheus
 node scripts/everclaw-wallet.mjs setup
 node scripts/everclaw-wallet.mjs swap eth 0.05
 node scripts/everclaw-wallet.mjs approve
@@ -67,10 +67,11 @@ MOR tokens are **staked, not spent** — returned when you close the session. St
 
 | Model | Best For | Tier |
 |-------|----------|------|
-| `glm-5` | Complex reasoning, coding, analysis (Opus 4.5-level) | STANDARD/HEAVY |
+| `glm-5` | Complex reasoning, coding, analysis (Opus 4.5-level) | HEAVY |
+| `gemma-4` | General purpose, balanced | STANDARD |
 | `glm-4.7-flash` | Fast responses, simple tasks | LIGHT |
-| `kimi-k2.5` | General purpose, good all-rounder | STANDARD |
-| `qwen3-235b` | Large context, multilingual | STANDARD |
+| `kimi-k2.5` | Large context, multilingual | STANDARD |
+| `qwen3-235b` | Research, complex analysis | STANDARD |
 
 ## Optional: WASM Status Tool
 
@@ -88,40 +89,37 @@ See [tools-src/morpheus-status/README.md](tools-src/morpheus-status/README.md) f
 
 | File | Purpose |
 |------|---------|
-| `setup.sh` | One-command installer for EverClaw proxy + guardian |
-| `ironclaw-skill/` | Rig-compatible skill for runtime [REDACTED] control |
+| `setup.sh` | One-command installer for Morpheus proxy + guardian |
+| `ironclaw-skill/` | Rig-compatible skill for runtime Morpheus control |
 | `tools-src/morpheus-status/` | WASI component for proxy health checks (Rust) |
-| `examples/` | Rig agent code examples with [REDACTED] provider |
+| `examples/` | Rig agent code examples with Morpheus provider |
 
 ## How It Works
 
-1. `setup.sh` installs the battle-tested EverClaw Node.js proxy + guardian sidecar
+1. `setup.sh` installs the battle-tested Morpheus Node.js proxy + guardian sidecar
 2. The proxy exposes a standard OpenAI-compatible API on `http://127.0.0.1:8083/v1`
 3. IronClaw's Rig framework connects via its built-in `openai` provider (zero Rust changes)
-4. The proxy handles all [REDACTED] complexity: session management, MOR staking, auto-renewal, model routing, retries
+4. The proxy handles all Morpheus complexity: session management, MOR staking, auto-renewal, model routing, retries
 5. Guardian monitors health and self-heals (billing-aware escalation, direct curl probes)
+
+## Included Features
+
+- **Gateway Guardian v5** — Self-healing watchdog with direct curl inference probes
+- **Model Router** — Open-source first: routes all tiers to Morpheus by default
+- **Multi-Key Auth Rotation** — Configure multiple API keys; auto-rotates when credits drain
+- **Smart Session Archiver** — Automatically archives old sessions
+
+See the main [Morpheus Skill README](../README.md) for full documentation.
 
 ## Contributing
 
-This is a community branch. PRs welcome for:
+PRs welcome for:
 - IronClaw-specific Rig integration patterns
 - WASI tool improvements
 - Additional example agents
 - CI/CD for the WASM build
 - IronClaw config auto-detection
 
-## Included with EverClaw v2026.2.21
-
-When you install the EverClaw proxy via `setup.sh`, you get these features automatically:
-
-- **Three-Shift Task Planning** — Morning/Afternoon/Night shift system proposes prioritized task plans with approval workflow. Nothing executes without your say-so.
-- **Gateway Guardian v5** — Self-healing watchdog with direct curl inference probes, billing-aware escalation, DIEM credit monitoring, and 4-stage restart escalation. No more Signal spam from failed health checks.
-- **Smart Session Archiver** — Automatically archives old sessions when size exceeds threshold, preventing browser slowdowns.
-- **Model Router** — Open-source first: routes all tiers to [REDACTED] by default (GLM-5, GLM-4.7-flash). Claude only kicks in as a fallback.
-- **Multi-Key Auth Rotation** — Configure multiple API keys; auto-rotates when credits drain.
-
-See the main [EverClaw README](../README.md) for full documentation.
-
 ## License
 
-MIT — same as EverClaw and IronClaw.
+MIT — same as Morpheus Skill and IronClaw.
