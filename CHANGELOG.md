@@ -2,6 +2,34 @@
 
 All notable changes to EverClaw are documented here.
 
+## [2026.4.12.1825] - 2026-04-12
+
+### Changed — OpenClaw Pin v2026.4.9 → v2026.4.11
+
+- **Dockerfile:** OpenClaw build target updated to `v2026.4.11`
+- **docker-compose.yml:** Image tag and build arg updated
+
+### Upstream Highlights (OpenClaw v2026.4.10–v2026.4.11)
+
+#### New Features
+- **Dreaming/memory-wiki:** ChatGPT import ingestion with Imported Insights and Memory Palace diary subtabs for inspecting imported chats and compiled wiki pages directly from the UI
+- **Control UI/webchat:** `[embed ...]` rich output tag, structured chat bubbles for media/reply/voice directives, external embed URL gating
+- **video_generate:** URL-only asset delivery, typed providerOptions, reference audio inputs, per-asset role hints, adaptive aspect-ratio support
+- **Plugin manifests:** Activation and setup descriptors for declarative auth/pairing/config flows
+- **Ollama:** Context-window and capability metadata caching during model discovery
+- **Microsoft Teams:** Reaction support with delegated OAuth
+- **Feishu:** Richer document comment sessions with reactions and typing feedback
+
+#### Fixes
+- **Agent timeouts:** Explicit run timeouts honored in LLM idle watchdog — slow models work until configured limit
+- **ACP child relay:** Internal progress chatter from spawned child runs no longer leaks into parent stream
+- **Agent failover:** Cross-provider fallback scoped to current attempt instead of stale session history
+- **Audio transcription:** Pinned DNS disabled only for OpenAI-compatible multipart requests
+- **WhatsApp:** Default account honored, react routed through gateway, image attachment paths preserved
+- **Telegram:** Topic-scoped session initialization stays on canonical transcript path
+- **Codex OAuth:** Upstream authorize URL scopes no longer rewritten
+- **macOS Talk Mode:** Microphone permission continues startup without double-toggle
+
 ## [2026.4.9.1656] - 2026-04-09
 
 ### Fixed — Morpheus Gateway Error Unwrapping (Issues #1 & #2)
