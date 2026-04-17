@@ -2,6 +2,47 @@
 
 All notable changes to EverClaw are documented here.
 
+## [2026.4.17.0050] - 2026-04-17
+
+### Changed — OpenClaw Pin v2026.4.14 → v2026.4.15
+
+- **Dockerfile:** OpenClaw build target updated to `v2026.4.15`
+- **docker-compose.yml:** Image tag and build arg updated
+
+### Upstream Highlights (OpenClaw v2026.4.14 → v2026.4.15)
+
+#### New Features
+- **Anthropic/models:** Claude Opus 4.7 defaults, opus aliases, bundled image understanding
+- **Google/TTS:** Gemini text-to-speech in bundled google plugin
+- **Control UI/Overview:** Model Auth status card (OAuth health + rate-limit pressure)
+- **Memory/LanceDB:** Cloud storage support for durable memory indexes
+- **GitHub Copilot/memory search:** Copilot embedding provider for memory search
+- **Agents/local models:** `localModelLean: true` flag drops heavyweight tools for weaker setups
+- **Packaging/plugins:** Localized bundled plugin runtime deps, leaner published builds
+
+#### Fixes
+- **Ollama/chat:** Provider prefix stripped from model IDs (fixes 404 on `ollama/` refs)
+- **Dreaming/memory-core:** Storage mode defaults to `separate` (daily files no longer dominated by dream blocks)
+- **Gateway/skills:** Snapshot version bumped on config writes (removed skills take effect immediately)
+- **Agents/tool-loop:** Unknown-tool loop guard enabled by default (stops "Tool not found" loops)
+- **Cron/announce:** NO_REPLY leak fixed (isolated cron replies no longer leak summary text)
+- **Agents/replay recovery:** 401 "input item ID" now gives /new guidance
+- **Agents/failover:** HTML provider error pages treated as transport failures
+- **Agents/tools:** Host tilde paths resolve correctly when OPENCLAW_HOME differs
+- **Speech/TTS:** Auto-enable bundled providers, route directive tokens through correct provider
+- **Agents/CLI transcripts:** CLI-backed turns persist to session history
+- **BlueBubbles/catchup:** Retry ceiling for persistently-failing messages
+- **OpenAI Codex/models:** Stale transport metadata self-heals to canonical Codex endpoint
+- **WhatsApp/web-session:** Auth race fix on reconnect
+
+#### Security
+- **Gateway/tools:** MEDIA: trust anchor on exact registered built-in tool names
+- **Gateway/webchat:** localRoots containment on audio embedding
+- **Matrix/pairing:** DM pairing-store blocked from room control commands
+- **Docker/build:** pnpm v10+ native bindings path fix
+
+(Reference: https://github.com/openclaw/openclaw/releases/tag/v2026.4.15)
+
 ## [2026.4.14.1520] - 2026-04-14
 
 ### Changed — OpenClaw Pin v2026.4.12 → v2026.4.14

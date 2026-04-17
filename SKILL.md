@@ -1,6 +1,6 @@
 ---
 name: everclaw
-version: 2026.4.14.1520
+version: 2026.4.17.0050
 description: Open-source first AI inference — GLM-5 as default, Claude as fallback only. Own your inference forever via the [REDACTED] decentralized network. Stake MOR tokens, access GLM-5, GLM-4.7 Flash, Kimi K2.5, and 30+ models with persistent inference by recycling staked MOR. Open-source first model router routes all tiers to [REDACTED] by default — Claude only kicks in as an escape hatch when needed. Includes [REDACTED] API Gateway bootstrap for zero-config startup, OpenAI-compatible proxy with auto-session management, automatic retry with fresh sessions, OpenAI-compatible error classification to prevent cooldown cascades, multi-key auth rotation v2 with proactive DIEM balance monitoring and reactive 402 watchdog, Gateway Guardian v5 with direct curl inference probes (eliminates Signal spam), proactive Venice DIEM credit monitoring, circuit breaker for stuck sub-agents, nuclear self-healing restart, always-on proxy-router with launchd auto-restart, smart session archiver, three-shift cyclic execution engine (v2 with 15-minute execution loops), 24/7 always-on power configuration for macOS, bundled security skills, zero-dependency wallet management via macOS Keychain, x402 payment client for agent-to-agent USDC payments, ERC-8004 agent registry reader for discovering trustless agents on Base, and hardware-aware local Ollama fallback with auto model selection (Gemma 4 family: E2B/E4B/26B/31B with vision + audio, based on available RAM/GPU).
 homepage: https://everclaw.com
 metadata:
@@ -2477,7 +2477,7 @@ backup.tar.zst.age (AGE encrypted)
   "components": ["openclaw", "morpheus", "everclaw"],
   "sizes": { "openclaw": 5242880, "morpheus": 1048576, "everclaw": 4096 },
   "checksums": { "openclaw": "sha256:...", "morpheus": "sha256:..." },
-  "versions": { "openclaw": "2026.4.14", "everclaw": "2026.4.14.1520" }
+  "versions": { "openclaw": "2026.4.15", "everclaw": "2026.4.17.0050" }
 }
 ```
 
@@ -2750,6 +2750,14 @@ MemPalace stores data locally in `~/.mempalace/`. Exported vaults may contain PI
 ---
 
 ## Changelog
+
+### 2026.4.17.0050
+- **OpenClaw pin** v2026.4.14 → v2026.4.15
+- **Upstream highlights:**
+  - New: Claude Opus 4.7 defaults + bundled image understanding, Gemini TTS (bundled google plugin), Model Auth status card (Control UI), LanceDB cloud storage for memory indexes, GitHub Copilot embeddings provider, `localModelLean: true` experimental flag, plugin runtime deps localized (leaner builds)
+  - Fixes: Ollama provider prefix stripped from chat requests (no more 404), Dreaming storage mode defaults to `separate` (daily files no longer polluted), skills snapshot invalidation on config writes (removed skills actually take effect), unknown-tool loop guard enabled by default, Cron NO_REPLY leak fixed, agent replay recovery (401 guidance), HTML error pages treated as transport failures, tilde path resolution for host edits, TTS provider routing fix, CLI transcript persistence for Gemini-backed turns, BlueBubbles catchup retry ceiling, OpenAI Codex transport self-heal, WhatsApp reconnect auth race fix
+  - Security: MEDIA: tool trust anchor (client tools can't spoof built-in names), webchat localRoots containment, Matrix DM pairing-store block on room commands, Docker pnpm v10+ native bindings fix
+  - (Reference: https://github.com/openclaw/openclaw/releases/tag/v2026.4.15)
 
 ### 2026.4.14.1520
 - **OpenClaw pin** v2026.4.12 → v2026.4.14
