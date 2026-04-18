@@ -21,7 +21,7 @@ curl -s -u "admin:$COOKIE_PASS" "http://localhost:8082/v1/chat/completions" \
 curl -s ... -d '{"session_id":"0x...","model_id":"0x...","model":"kimi-k2.5","messages":[...]}'
 ```
 
-This is the **#1 most common mistake** with the [REDACTED] proxy-router.
+This is the **#1 most common mistake** with the Morpheus proxy-router.
 
 ---
 
@@ -48,8 +48,8 @@ The provider endpoint can only be resolved from the model ID path.
 **Cause:** Your wallet doesn't have enough MOR to stake for the session. MOR is locked (staked) when sessions are opened.
 
 **Fix:**
-1. Check your balance: `bash skills/everclaw/scripts/balance.sh`
-2. Close old/unused sessions to reclaim staked MOR: `bash skills/everclaw/scripts/session.sh close 0xSESSION_ID`
+1. Check your balance: `./scripts/session.sh status`
+2. Close old/unused sessions: `./scripts/session.sh cleanup` (or close individually: `./scripts/session.sh close 0xSESSION_ID`)
 3. Wait for MOR to return to wallet (1-2 blocks)
 4. Try opening the session again with a shorter duration
 
@@ -82,19 +82,19 @@ Then restart the proxy-router.
 **Fix:** Re-open sessions after every restart:
 
 ```bash
-bash skills/everclaw/scripts/session.sh open kimi-k2.5:web 3600
+./scripts/session.sh open kimi-k2.5:web 3600
 ```
 
 The blockchain still has your session, and staked MOR is still locked until the session expires or is closed.
 
 ---
 
-## [REDACTED] Conflicts
+## Morpheus Desktop App Conflicts
 
-**Cause:** The [REDACTED] desktop app manages its own proxy-router process. Running both simultaneously causes port conflicts and the UI may kill your headless router.
+**Cause:** The Morpheus desktop app manages its own proxy-router process. Running both simultaneously causes port conflicts and the UI may kill your headless router.
 
 **Fix:**
-- Don't run [REDACTED] and headless proxy-router at the same time
+- Don't run the desktop app and headless proxy-router at the same time
 - If you need to switch, fully quit one before starting the other
 - Check for rogue processes: `pgrep -f proxy-router`
 
@@ -194,14 +194,66 @@ kill <PID>
 
 ---
 
+## "Insufficient MOR balance" / "ERC20: transfer amount exceeds balance"
+
+**Cause:** Your wallet doesn't have enough MOR to stake for a new session. Each 24h session requires ~1,268 MOR (at current pricing of 46,296 wei/sec).
+
+**Common hidden cause:** Stale sessions accumulating MOR. The proxy-router `/blockchain/sessions/user` endpoint has a **hidden pagination limit (~100 sessions)**. Sessions beyond offset 100 are invisible, so old sessions never get closed and MOR stays locked.
+
+**Fix:**
+
+1. **Run cleanup first** to close stale sessions and free locked MOR:
+   ```bash
+   export MORPHEUS_WALLET_ADDRESS=0xYourRouterWallet
+   ./scripts/session.sh cleanup
+   ```
+
+2. **Check wallet balance after cleanup:**
+   ```bash
+   ./scripts/session.sh status
+   ```
+
+3. If still insufficient, transfer from your SAFE:
+   ```bash
+   node scripts/safe-transfer.mjs 2000 --execute
+   ```
+
+**Prevention:** Always run `session.sh cleanup` before `session.sh open`. The staking monitor cron pack does this automatically.
+
+---
+
+## Sessions not showing in /sessions/user
+
+**Cause:** The proxy-router `/blockchain/sessions/user` endpoint only returns the first ~100 sessions. If your wallet has more than 100 historical sessions, newer ones past that offset are invisible.
+
+**Fix:** Use the `cleanup` command which queries the Diamond contract directly with pagination:
+
+```bash
+export MORPHEUS_WALLET_ADDRESS=0xYourRouterWallet
+./scripts/session.sh cleanup
+```
+
+Or query on-chain directly (example):
+```bash
+cast call 0x6aBE1d282f72B474E54527D93b979A4f64d3030a \
+  "getUserSessions(address,uint256,uint256)(bytes32[])" \
+  0xYourRouterWallet 100 50 --rpc-url https://base-mainnet.public.blastapi.io
+```
+
+**Key insight:** The on-chain `getUserSessions(addr, offset, limit)` is the only reliable way to enumerate all sessions. Always paginate with increasing offsets until you get an empty result.
+
+---
+
 ## General Debugging Checklist
 
 1. ✅ Is the proxy-router running? `pgrep -f proxy-router`
 2. ✅ Is the health check passing? `curl -s -u "admin:$(cat ~/morpheus/.cookie | cut -d: -f2)" http://localhost:8082/healthcheck`
 3. ✅ Is `ETH_NODE_ADDRESS` set? `grep ETH_NODE_ADDRESS ~/morpheus/.env`
 4. ✅ Is `models-config.json` populated? `cat ~/morpheus/models-config.json | jq 'keys'`
-5. ✅ Do you have MOR? `bash skills/everclaw/scripts/balance.sh`
+5. ✅ Do you have MOR? `./scripts/session.sh status`
 6. ✅ Do you have ETH for gas? (check balance output)
-7. ✅ Is there an active session for your model? `bash skills/everclaw/scripts/session.sh list`
+7. ✅ Is there an active session for your model? `./scripts/session.sh list`
 8. ✅ Are you using HTTP headers (not body) for session_id/model_id?
-9. ✅ Check router logs: `tail -50 ~/morpheus/data/logs/router-stdout.log`
+9. ✅ Run full diagnostics: `node ./scripts/morpheus-session-mgr.mjs status`
+10. ✅ Close stale sessions first: `./scripts/session.sh cleanup`
+11. ✅ Check router logs: `tail -50 ~/morpheus/data/logs/router-stdout.log`

@@ -28,14 +28,28 @@ import fs from "node:fs";
 import { execSync } from "node:child_process";
 
 // --- Configuration ---
-const PROXY_URL = process.env.MORPHEUS_PROXY_URL || "http://127.0.0.1:8083";
+const API_BASE = process.env.MORPHEUS_API_BASE || "http://127.0.0.1:8082";
 const RPC_URL = process.env.EVERCLAW_RPC || "https://base-mainnet.public.blastapi.io";
 const MOR_TOKEN = "0x7431aDa8a591C955a994a21710752EF9b882b8e3";
 const ROUTER_WALLET = process.env.MORPHEUS_WALLET_ADDRESS;
 const SAFE_ADDRESS = process.env.MORPHEUS_SAFE_ADDRESS;
-if (!ROUTER_WALLET) { console.error("❌ MORPHEUS_WALLET_ADDRESS env var required"); process.exit(1); }
-if (!SAFE_ADDRESS) { console.error("❌ MORPHEUS_SAFE_ADDRESS env var required"); process.exit(1); }
-const DAILY_STAKE_RATE = parseFloat(process.env.MORPHEUS_DAILY_STAKE || "633"); // MOR per day (approximate)
+
+function requireWallet() {
+  if (!ROUTER_WALLET) {
+    console.error("❌ MORPHEUS_WALLET_ADDRESS env var required for on-chain queries");
+    process.exit(1);
+  }
+}
+
+function requireWalletAndSafe() {
+  requireWallet();
+  if (!SAFE_ADDRESS) {
+    console.error("❌ MORPHEUS_SAFE_ADDRESS env var required");
+    process.exit(1);
+  }
+}
+const DAILY_STAKE_RATE = parseFloat(process.env.MORPHEUS_DAILY_STAKE || "1268"); // MOR per day at current pricing
+const DIAMOND_CONTRACT = "0x6aBE1d282f72B474E54527D93b979A4f64d3030a";
 
 // --- Helpers ---
 
@@ -101,13 +115,14 @@ function formatMor(n) {
 
 async function cmdStatus() {
   console.log("\n🔍 Morpheus Session Manager — Status\n");
+  requireWalletAndSafe();
 
   // Proxy health
   let health;
   try {
-    health = await httpGet(`${PROXY_URL}/health`);
+    health = await httpGet(`${API_BASE}/health`);
   } catch (e) {
-    console.error("❌ Proxy not responding at", PROXY_URL);
+    console.error("❌ Proxy not responding at", API_BASE);
     console.error("   Is morpheus-proxy running?\n");
     process.exit(1);
   }
@@ -173,6 +188,7 @@ async function cmdStatus() {
 
 async function cmdBalance() {
   console.log("\n💰 MOR Balance Report\n");
+  requireWalletAndSafe();
 
   const [routerMor, safeMor, routerEth] = await Promise.all([
     getMorBalance(ROUTER_WALLET),
@@ -194,7 +210,7 @@ async function cmdModels() {
 
   let health;
   try {
-    health = await httpGet(`${PROXY_URL}/health`);
+    health = await httpGet(`${API_BASE}/health`);
   } catch {
     console.error("❌ Proxy not responding\n");
     process.exit(1);
@@ -224,6 +240,7 @@ async function cmdModels() {
 
 async function cmdEstimate() {
   console.log("\n📐 Session Duration Estimate\n");
+  requireWalletAndSafe();
 
   const routerMor = await getMorBalance(ROUTER_WALLET);
   const safeMor = await getMorBalance(SAFE_ADDRESS);
@@ -279,29 +296,240 @@ async function cmdFund() {
 }
 
 async function cmdSessions() {
-  console.log("\n📡 Active Sessions\n");
+  console.log("\n📡 Active Sessions (on-chain, paginated)\n");
+  requireWallet();
 
-  let health;
-  try {
-    health = await httpGet(`${PROXY_URL}/health`);
-  } catch {
-    console.error("❌ Proxy not responding\n");
-    process.exit(1);
-  }
-
-  const sessions = health.activeSessions || [];
-  if (sessions.length === 0) {
-    console.log("   No active sessions\n");
+  const allIds = await getAllSessionIds();
+  if (allIds.length === 0) {
+    console.log("   No sessions found on-chain.\n");
     return;
   }
 
-  for (const s of sessions) {
-    const expiresAt = new Date(s.expiresAt);
-    const expiresIn = Math.max(0, (expiresAt.getTime() - Date.now()) / 3600000);
-    const active = s.active ? "✅" : "❌";
-    console.log(`   ${active} ${s.model}`);
-    console.log(`      Session: ${s.sessionId}`);
-    console.log(`      Expires: ${expiresAt.toISOString()} (~${expiresIn.toFixed(1)}h remaining)\n`);
+  console.log(`   Total on-chain sessions: ${allIds.length}\n`);
+
+  const now = Math.floor(Date.now() / 1000);
+  let openCount = 0;
+
+  for (const sid of allIds) {
+    const session = await getSessionDetail(sid);
+    if (!session || session.closedAt !== 0) continue;
+
+    openCount++;
+    const expiresIn = Math.max(0, (session.endsAt - now) / 3600);
+    const stakeMor = Number(BigInt(session.stake)) / 1e18;
+    const modelShort = session.modelId.slice(0, 18) + "...";
+    const status = session.endsAt < now ? "⚠️  EXPIRED" : "✅ ACTIVE";
+
+    console.log(`   ${status}: ${sid.slice(0, 22)}...`);
+    console.log(`      Model: ${modelShort}`);
+    console.log(`      Stake: ${stakeMor.toFixed(2)} MOR`);
+    console.log(`      Expires in: ${expiresIn.toFixed(1)}h\n`);
+  }
+
+  if (openCount === 0) {
+    console.log("   No open sessions (all closed).\n");
+  } else {
+    console.log(`   Open sessions: ${openCount}\n`);
+  }
+}
+
+/**
+ * Enumerate ALL on-chain sessions via Diamond contract pagination.
+ * The proxy-router /sessions/user endpoint has a hidden limit (~100).
+ * Sessions beyond that offset are invisible. Always paginate on-chain.
+ */
+async function getAllSessionIds() {
+  const allIds = [];
+  let offset = 0;
+  const batchSize = 100;
+
+  while (true) {
+    try {
+      const result = execSync(
+        `cast call "${DIAMOND_CONTRACT}" ` +
+        `"getUserSessions(address,uint256,uint256)(bytes32[])" ` +
+        `"${ROUTER_WALLET}" "${offset}" "${batchSize}" ` +
+        `--rpc-url "${RPC_URL}"`,
+        { encoding: "utf-8", timeout: 30000 }
+      ).trim();
+
+      const ids = result
+        .replace(/[\[\]]/g, "")
+        .split(",")
+        .map((s) => s.trim())
+        .filter((s) => s.startsWith("0x"));
+
+      if (ids.length === 0) break;
+      allIds.push(...ids);
+      if (ids.length < batchSize) break;
+      offset += batchSize;
+    } catch {
+      break;
+    }
+  }
+
+  return allIds;
+}
+
+/**
+ * Get session detail from proxy-router by session ID.
+ * Returns { closedAt, stake, endsAt, modelId, openedAt } or null.
+ */
+async function getSessionDetail(sessionId) {
+  try {
+    const cookiePass = getCookiePass();
+    const url = new URL(`/blockchain/sessions/${sessionId}`, API_BASE);
+    const auth = Buffer.from(`admin:${cookiePass}`).toString("base64");
+
+    return new Promise((resolve) => {
+      http.get(url, { headers: { Authorization: `Basic ${auth}` }, timeout: 10000 }, (res) => {
+        const chunks = [];
+        res.on("data", (c) => chunks.push(c));
+        res.on("end", () => {
+          try {
+            const data = JSON.parse(Buffer.concat(chunks).toString());
+            const s = data.session || {};
+            resolve({
+              closedAt: parseInt(s.ClosedAt || s.closedAt || "1"),
+              stake: String(s.Stake || s.stake || "0"),
+              endsAt: parseInt(s.EndsAt || s.endsAt || "0"),
+              modelId: s.ModelAgentId || s.modelAgentId || "unknown",
+              openedAt: parseInt(s.OpenedAt || s.openedAt || "0"),
+            });
+          } catch {
+            resolve(null);
+          }
+        });
+      }).on("error", () => resolve(null));
+    });
+  } catch {
+    return null;
+  }
+}
+
+function getCookiePass() {
+  const cookiePath = `${process.env.HOME}/morpheus/.cookie`;
+  if (!fs.existsSync(cookiePath)) return "";
+  const raw = fs.readFileSync(cookiePath, "utf-8").trim();
+  return raw.includes(":") ? raw.split(":").pop() : raw;
+}
+
+/**
+ * Close stale sessions. Keeps only the latest session per model.
+ * This MUST run before opening new sessions to prevent MOR accumulation.
+ *
+ * Root cause: The proxy-router /sessions/user has a hidden pagination
+ * limit (~100 sessions). Sessions beyond that offset are invisible,
+ * so new sessions keep opening without closing old ones, silently
+ * locking MOR in stale sessions.
+ */
+async function cmdCleanup() {
+  console.log("\n🧹 Session Cleanup (close stale, keep latest per model)\n");
+  requireWallet();
+
+  // Verify cast is available
+  try {
+    execSync("which cast", { encoding: "utf-8" });
+  } catch {
+    console.error("❌ 'cast' (foundry) required for on-chain session queries.");
+    console.error("   Install: curl -L https://foundry.paradigm.xyz | bash && foundryup\n");
+    process.exit(1);
+  }
+
+  const allIds = await getAllSessionIds();
+  console.log(`   Total on-chain sessions: ${allIds.length}`);
+
+  if (allIds.length === 0) {
+    console.log("   Nothing to clean up.\n");
+    return;
+  }
+
+  // Find all open sessions and their details
+  const openSessions = [];
+  let closedCount = 0;
+
+  for (const sid of allIds) {
+    const session = await getSessionDetail(sid);
+    if (!session || session.closedAt !== 0) {
+      closedCount++;
+      continue;
+    }
+    openSessions.push({ id: sid, ...session });
+  }
+
+  console.log(`   Already closed: ${closedCount}`);
+  console.log(`   Currently open: ${openSessions.length}`);
+
+  if (openSessions.length === 0) {
+    console.log("\n   ✅ No open sessions to clean up.\n");
+    return;
+  }
+
+  // Find the best (latest-expiring) session per model
+  const bestPerModel = new Map();
+  for (const s of openSessions) {
+    const existing = bestPerModel.get(s.modelId);
+    if (!existing || s.endsAt > existing.endsAt) {
+      bestPerModel.set(s.modelId, s);
+    }
+  }
+
+  // Close stale sessions (not the best per model)
+  let staleClosed = 0;
+  const cookiePass = getCookiePass();
+
+  console.log("");
+  for (const s of openSessions) {
+    const best = bestPerModel.get(s.modelId);
+    const stakeMor = Number(BigInt(s.stake)) / 1e18;
+
+    if (best && s.id === best.id) {
+      console.log(`   ✅ KEEP: ${s.id.slice(0, 22)}... (${stakeMor.toFixed(0)} MOR, latest for model)`);
+      continue;
+    }
+
+    // Close this stale session
+    process.stdout.write(`   🗑️  CLOSE: ${s.id.slice(0, 22)}... (${stakeMor.toFixed(0)} MOR) → `);
+    try {
+      const closeUrl = new URL(`/blockchain/sessions/${s.id}/close`, API_BASE);
+      const auth = Buffer.from(`admin:${cookiePass}`).toString("base64");
+      const tx = await new Promise((resolve, reject) => {
+        const req = http.request(closeUrl, {
+          method: "POST",
+          headers: { Authorization: `Basic ${auth}` },
+          timeout: 30000,
+        }, (res) => {
+          const chunks = [];
+          res.on("data", (c) => chunks.push(c));
+          res.on("end", () => {
+            try {
+              const data = JSON.parse(Buffer.concat(chunks).toString());
+              resolve(data.tx || "submitted");
+            } catch {
+              resolve("submitted");
+            }
+          });
+        });
+        req.on("error", reject);
+        req.end();
+      });
+      console.log(`tx: ${String(tx).slice(0, 22)}...`);
+      staleClosed++;
+
+      // Space out transactions to avoid nonce issues
+      if (staleClosed < openSessions.length - bestPerModel.size) {
+        await new Promise((r) => setTimeout(r, 2000));
+      }
+    } catch (e) {
+      console.log(`error: ${e.message}`);
+    }
+  }
+
+  console.log(`\n   Cleanup complete: ${staleClosed} stale sessions closed.`);
+  if (staleClosed > 0) {
+    console.log(`   ~${(staleClosed * DAILY_STAKE_RATE).toFixed(0)} MOR returning to wallet.\n`);
+  } else {
+    console.log("");
   }
 }
 
@@ -342,12 +570,20 @@ Commands:
   balance    Check MOR balance (router + safe)
   fund       Transfer MOR from Safe to Router (delegates to safe-transfer.mjs)
   models     List available P2P models
-  sessions   List active sessions with expiry info
+  sessions   List active sessions (on-chain paginated)
+  cleanup    Close stale sessions, keep latest per model
   estimate   Estimate max session duration from current balance
   logs       Show recent session-related log entries
 
+Environment:
+  MORPHEUS_WALLET_ADDRESS    Your proxy-router wallet (required for on-chain queries)
+  MORPHEUS_SAFE_ADDRESS      Your SAFE multisig address
+  EVERCLAW_RPC               Base RPC endpoint (default: public blastapi)
+  MORPHEUS_DAILY_STAKE       MOR per 1-day session (default: 1268)
+
 Examples:
   node morpheus-session-mgr.mjs status
+  node morpheus-session-mgr.mjs cleanup            # ALWAYS run before opening sessions
   node morpheus-session-mgr.mjs fund 2000 --execute
   node morpheus-session-mgr.mjs estimate
 `);
@@ -363,6 +599,7 @@ switch (command) {
   case "sessions": await cmdSessions(); break;
   case "estimate": await cmdEstimate(); break;
   case "fund": await cmdFund(); break;
+  case "cleanup": await cmdCleanup(); break;
   case "logs": await cmdLogs(); break;
   case "help":
   case "--help":

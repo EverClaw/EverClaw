@@ -2,6 +2,32 @@
 
 All notable changes to EverClaw are documented here.
 
+## [2026.4.18.0201] - 2026-04-18
+
+### Added — MOR Staking Session Management
+
+- **On-chain session pagination:** `session.sh cleanup` and `morpheus-session-mgr.mjs cleanup` enumerate ALL sessions via Diamond contract `getUserSessions(addr, offset, limit)` — the proxy-router `/sessions/user` endpoint has a hidden ~100 session limit
+- **Stale session cleanup:** Automatically closes orphaned sessions, keeps only the latest per model. Frees locked MOR.
+- **Pre-open cleanup:** `session.sh open` now runs cleanup before opening new sessions (best-effort, requires `cast`)
+- **GLM-5 + GLM-5.1:web:** Added to model ID map in `session.sh`
+- **Staking monitor cron pack:** `cron-packs/packs/staking-monitor.json` — nightly cleanup + 6-hourly balance alerts
+- **Troubleshooting entries:** "Insufficient MOR" and "Sessions not showing" root-cause docs with pagination fix
+
+### Fixed
+
+- **Port consistency:** `morpheus-session-mgr.mjs` uses `API_BASE` (default 8082) everywhere — no more mixed 8082/8083 references
+- **Bash 3.2 compatibility:** `session.sh cleanup` uses indexed arrays (no `declare -A`), works on macOS default bash
+- **cast output parsing:** Properly strips quotes from `cast call` output (was silently returning 0 sessions)
+- **Cookie parsing:** Handles both `user:pass` and plain-password cookie formats
+- **[REDACTED] placeholders:** All removed from troubleshooting.md, replaced with "Morpheus" / "proxy-router"
+- **Stale MOR rate:** Updated default from 633 to 1268 MOR/day
+
+### Security
+
+- Zero PII — no personal addresses, only public contract addresses (Diamond, MOR token) and on-chain model IDs
+- All user-specific values from environment variables
+- Grok 4.2 reasoning audit: 5 rounds, 4/4 files rated **Perfect**
+
 ## [2026.4.17.0050] - 2026-04-17
 
 ### Changed — OpenClaw Pin v2026.4.14 → v2026.4.15

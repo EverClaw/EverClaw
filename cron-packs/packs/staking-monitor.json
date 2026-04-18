@@ -1,0 +1,39 @@
+[
+    {
+        "name": "MOR Staking Monitor 💰",
+        "schedule": {
+            "kind": "cron",
+            "expr": "0 20 * * *",
+            "tz": "UTC"
+        },
+        "sessionTarget": "isolated",
+        "payload": {
+            "kind": "agentTurn",
+            "model": "glm-4.7-flash",
+            "timeoutSeconds": 300,
+            "message": "Run the MOR staking session monitor.\n\nCRITICAL: Always close stale sessions BEFORE opening new ones.\n\nSteps:\n1. Run cleanup first: bash ~/.openclaw/workspace/skills/everclaw/scripts/session.sh cleanup\n   - This enumerates ALL on-chain sessions via Diamond contract pagination\n   - Closes stale/expired sessions (keeps latest per model)\n   - The proxy-router /sessions/user has a hidden limit (~100 sessions) — cleanup uses on-chain pagination to find ALL sessions\n\n2. Check wallet balance: bash ~/.openclaw/workspace/skills/everclaw/scripts/session.sh status\n\n3. For each target model in MORPHEUS_TARGET_MODELS:\n   - Check if there is an active session (from cleanup output)\n   - If no active session, open one: bash scripts/session.sh open <model> 86400\n   - If session exists and expires within 2 hours, open a new one\n\n4. Report results via YOUR_CHANNEL to YOUR_PHONE:\n   - Active sessions (model, expiry)\n   - Sessions cleaned up (count, MOR freed)\n   - Wallet balance (MOR + ETH)\n   - Any failures\n\nEnvironment variables required:\n  MORPHEUS_WALLET_ADDRESS - proxy-router wallet\n  MORPHEUS_TARGET_MODELS  - e.g. 'glm-5 glm-5.1:web'\n\nAfter sending the report: NO_REPLY"
+        },
+        "delivery": {
+            "mode": "none"
+        }
+    },
+    {
+        "name": "MOR Balance Alert ⚠️",
+        "schedule": {
+            "kind": "cron",
+            "expr": "0 */6 * * *",
+            "tz": "UTC"
+        },
+        "sessionTarget": "isolated",
+        "payload": {
+            "kind": "agentTurn",
+            "model": "glm-4.7-flash",
+            "thinking": "off",
+            "timeoutSeconds": 60,
+            "message": "Quick MOR balance check. Run: bash ~/.openclaw/workspace/skills/everclaw/scripts/session.sh status\n\nParse the output:\n- If MOR balance < 500, alert via YOUR_CHANNEL to YOUR_PHONE: '⚠️ Low MOR: [X] MOR in wallet. Need ~1268 per session.'\n- If ETH balance < 0.005, alert: '⚠️ Low ETH for gas: [X] ETH.'\n- If everything looks fine, respond with NO_REPLY."
+        },
+        "delivery": {
+            "mode": "none"
+        }
+    }
+]
