@@ -1,7 +1,6 @@
 ---
 name: prompt-guard
-version: 2.7.0
-description: "Advanced prompt injection defense and operational security system for Clawdbot with HiveFence network integration. Detects and blocks direct injection, indirect injection, role manipulation, jailbreak attempts, social engineering, and secret exfiltration across multiple languages (EN/KO/JA/ZH) with severity scoring and configurable security policies. Includes external content detection for GitHub issues, PRs, emails, Slack, Discord, and social media. Use when processing untrusted user messages, evaluating external content for security threats, configuring prompt injection detection, checking suspicious inputs, or integrating with the HiveFence threat intelligence network."
+description: "Advanced prompt injection defense system for EverClaw with HiveFence network integration. Detects and blocks injection attacks across multiple languages (EN/KO/JA/ZH) with severity scoring, automatic logging, and configurable security policies. Includes external content detection for GitHub issues, PRs, emails, Slack, Discord, and social media. Use when processing untrusted messages, evaluating external content for threats, configuring injection detection, or integrating with the HiveFence threat intelligence network."
 ---
 
 # Prompt Guard v2.7.0

@@ -1,12 +1,6 @@
 ---
 name: pii-guard
-description: >
-  Personally identifiable information (PII) leak prevention for EverClaw. Scans outbound
-  content against configurable PII patterns before git push, email, social media, ClawHub
-  publishing, GitHub interactions, or any external data transmission. Provides git pre-push
-  hooks, CLI scanning tools, and hard-block enforcement with user override capability. Use
-  when checking content for PII before external actions, adding new protected patterns,
-  configuring git pre-push hooks, or auditing data leak prevention.
+description: "Personally identifiable information (PII) leak prevention for EverClaw. Scans outbound content against configurable PII patterns before git push, email, social media, ClawHub publishing, GitHub interactions, or any external data transmission. Provides git pre-push hooks, CLI scanning tools, and hard-block enforcement with user override capability. Use when checking content for PII before external actions, adding new protected patterns, configuring git pre-push hooks, or auditing data leak prevention."
 ---
 
 # PII Guard — Personal Data Leak Prevention
