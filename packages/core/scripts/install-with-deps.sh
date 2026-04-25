@@ -418,16 +418,18 @@ install_dep() {
         pacman) sudo pacman -S --noconfirm curl ;;
         *)      log_warn "Cannot auto-install curl on this system"; return 1 ;;
       esac
-      verify_installed "curl" "curl"
+      verify_installed "curl" "curl" || return 1
       ;;
 
     git)
       if [[ "$OS" == "Darwin" ]]; then
         if [[ -n "$BREW_CMD" ]]; then
           "$BREW_CMD" install git 2>&1 | tail -3
+          verify_installed "git" "git" || return 1
         else
-          log_warn "Git install skipped (no Homebrew on this Mac)"
+          log_err "Git install skipped (no Homebrew on this Mac)"
           log "  Install Xcode Command Line Tools: xcode-select --install"
+          return 1
         fi
       else
         case "$PACKAGE_MANAGER" in
@@ -437,8 +439,8 @@ install_dep() {
           pacman) sudo pacman -S --noconfirm git ;;
           *)      log_warn "Cannot auto-install git on this system"; return 1 ;;
         esac
+        verify_installed "git" "git" || return 1
       fi
-      verify_installed "git" "git"
       ;;
 
     "Node.js")
@@ -473,23 +475,24 @@ install_dep() {
 
     npm)
       # npm comes with Node.js — just verify
-      if ! verify_installed "npm" "npm" 2>/dev/null; then
-        # On Linux, npm might need separate install
-        case "$PACKAGE_MANAGER" in
-          apt)    sudo apt-get install -y -qq npm ;;
-          dnf)    sudo dnf install -y -q npm ;;
-          yum)    sudo yum install -y -q npm ;;
-          pacman) sudo pacman -S --noconfirm npm ;;
-          *)      log_warn "Cannot auto-install npm on this system"; return 1 ;;
-        esac
-        verify_installed "npm" "npm"
+      if verify_installed "npm" "npm" 2>/dev/null; then
+        return 0
       fi
+      # On Linux, npm might need separate install
+      case "$PACKAGE_MANAGER" in
+        apt)    sudo apt-get install -y -qq npm ;;
+        dnf)    sudo dnf install -y -q npm ;;
+        yum)    sudo yum install -y -q npm ;;
+        pacman) sudo pacman -S --noconfirm npm ;;
+        *)      log_warn "Cannot auto-install npm on this system"; return 1 ;;
+      esac
+      verify_installed "npm" "npm" || return 1
       ;;
 
     OpenClaw)
       if command -v npm &>/dev/null; then
         npm install -g openclaw@latest 2>&1 | tail -3
-        verify_installed "OpenClaw" "openclaw"
+        verify_installed "OpenClaw" "openclaw" || return 1
       else
         log_err "npm not found — cannot install OpenClaw"
         return 1
