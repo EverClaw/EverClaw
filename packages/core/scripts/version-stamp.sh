@@ -15,6 +15,21 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
+# Determine correct package.json location. In monorepo the root package.json
+# lives two directories above packages/core/. In composed flavor repos both
+# live in the same directory.
+PKG_JSON="$REPO_DIR/package.json"
+if [ ! -f "$PKG_JSON" ] && [ -f "$REPO_DIR/SKILL.md" ]; then
+  CANDIDATE="$(cd "$REPO_DIR/../.." && pwd)/package.json"
+  if [ -f "$CANDIDATE" ]; then
+    PKG_JSON="$CANDIDATE"
+  fi
+fi
+if [ ! -f "$PKG_JSON" ]; then
+  echo "ERROR: package.json not found (tried $PKG_JSON)" >&2
+  exit 1
+fi
+
 # Generate version components from current UTC time
 YEAR=$(date -u +%Y)
 MONTH=$(date -u +%-m)       # no leading zero
@@ -56,16 +71,17 @@ case "$ACTION" in
     FILES_UPDATED=0
 
     # 1. package.json — update "version" field
-    if [ -f "package.json" ]; then
-      OLD_VER=$(grep -o '"version": *"[^"]*"' package.json | head -1 | grep -o '"[^"]*"$' | tr -d '"')
+    # PKG_JSON resolved at script start (handles both monorepo and composed repos)
+    if [ -f "$PKG_JSON" ]; then
+      OLD_VER=$(grep -o '"version": *"[^"]*"' "$PKG_JSON" | head -1 | grep -o '"[^"]*"$' | tr -d '"')
       if [ "$ACTION" = "dry-run" ]; then
         echo "package.json: \"$OLD_VER\" → \"$PKG_VERSION\""
       else
         # Use sed to replace the version value (first match only)
         if [[ "$OSTYPE" == "darwin"* ]]; then
-          sed -i '' "s/\"version\": *\"${OLD_VER}\"/\"version\": \"${PKG_VERSION}\"/" package.json
+          sed -i '' "s/\"version\": *\"${OLD_VER}\"/\"version\": \"${PKG_VERSION}\"/" "$PKG_JSON"
         else
-          sed -i "s/\"version\": *\"${OLD_VER}\"/\"version\": \"${PKG_VERSION}\"/" package.json
+          sed -i "s/\"version\": *\"${OLD_VER}\"/\"version\": \"${PKG_VERSION}\"/" "$PKG_JSON"
         fi
         echo "✅ package.json: $OLD_VER → $PKG_VERSION"
         FILES_UPDATED=$((FILES_UPDATED + 1))

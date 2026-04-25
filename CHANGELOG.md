@@ -2,6 +2,15 @@
 
 All notable changes to EverClaw are documented here.
 
+## [2026.4.25.0259] - 2026-04-25
+
+### Fixed — Monorepo Path Issues
+
+- **npm test now works from monorepo root:** Added symlink `tests -> packages/core/tests` so the test glob in package.json finds tests in the monorepo. Previously `npm test` found 0 tests because `tests/` only existed in `packages/core/`.
+- **version-stamp.sh finds package.json in monorepo:** Added monorepo detection that looks for package.json at the repo root (two levels up from REPO_DIR) when running from packages/core/. Previously the script could only find 3/4 files (SKILL.md, Dockerfile, docker-compose.yml in packages/core/) but missed package.json at repo root.
+
+**Note:** users running macOS should run `git config core.symlinks true` to ensure the symlink works correctly on checkout. Windows users should enable Developer Mode for symlink support.
+
 ## [2026.4.25.0136] - 2026-04-25
 
 ### Fixed — Monorepo Bootstrap Wrapper
