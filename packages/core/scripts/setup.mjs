@@ -20,7 +20,7 @@
  *   node scripts/setup.mjs --help
  */
 
-import { readFileSync, writeFileSync, existsSync, createReadStream } from 'fs';
+import { readFileSync, writeFileSync, existsSync, createReadStream, readdirSync, rmSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { platform, homedir } from 'os';
@@ -738,6 +738,49 @@ if (applyMode) {
     }
   } else {
     console.log('\n  ─── Security tier skipped (--no-security) ────────────────');
+  }
+
+  // ─── Bonjour/mDNS Mitigation (OpenClaw v2026.4.24) ────────────────────
+  // OpenClaw v2026.4.24 ships a broken bonjour (mDNS/CIAO) plugin that throws
+  // unhandled promise rejections on macOS and headless Linux.
+  // This crashes WebSocket connections with ECONNRESET → 1006.
+  // Ref: https://github.com/openclaw/openclaw/issues/70232
+  //
+  // Mitigation: disable the bonjour plugin in config + clean corrupted
+  // plugin-runtime-deps. Safe — bonjour is only for local network discovery.
+
+  console.log('\n  ─── Bonjour/mDNS Mitigation (v2026.4.24) ─────────────────');
+  try {
+    const bonjourEnabled = merged?.gateway?.plugins?.bonjour?.enabled;
+    if (bonjourEnabled !== false) {
+      if (!merged.gateway) merged.gateway = {};
+      if (!merged.gateway.plugins) merged.gateway.plugins = {};
+      if (!merged.gateway.plugins.bonjour) merged.gateway.plugins.bonjour = {};
+      merged.gateway.plugins.bonjour.enabled = false;
+      writeFileSync(configPath, JSON.stringify(merged, null, 2) + '\n');
+      console.log('  ✅ Bonjour plugin disabled (prevents mDNS crash)');
+    } else {
+      console.log('  ✅ Bonjour plugin already disabled');
+    }
+  } catch (e) {
+    console.log(`  ⚠️  Bonjour mitigation failed (not fatal): ${e.message}`);
+  }
+
+  // Clean corrupted plugin-runtime-deps (ENOTEMPTY fix)
+  try {
+    const pluginDepsDir = join(homedir(), '.openclaw', 'plugin-runtime-deps');
+    if (existsSync(pluginDepsDir)) {
+      const entries = readdirSync(pluginDepsDir);
+      for (const entry of entries) {
+        if (entry.startsWith('openclaw-2026.4.24')) {
+          const target = join(pluginDepsDir, entry);
+          rmSync(target, { recursive: true, force: true });
+          console.log('  ✅ Cleaned corrupted plugin-runtime-deps');
+        }
+      }
+    }
+  } catch (e) {
+    console.log(`  ⚠️  Plugin cleanup failed (not fatal): ${e.message}`);
   }
 
   // Test gateway if requested

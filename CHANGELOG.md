@@ -2,6 +2,36 @@
 
 All notable changes to EverClaw are documented here.
 
+## [2026.4.28.0145] - 2026-04-28
+
+### Changed — OpenClaw Pin v2026.4.23 → v2026.4.25
+
+- **Dockerfile:** OpenClaw build target updated from `v2026.4.23` to `v2026.4.25`
+- **docker-compose.yml:** Image tag and build arg updated
+
+### Upstream Highlights (OpenClaw v2026.4.23 → v2026.4.25)
+
+#### New Features
+- **TTS overhaul:** `/tts latest` read-aloud, `/tts chat on|off` session-scoped auto-TTS, per-agent voice overrides, 6 new TTS providers (Azure Speech, Xiaomi, Local CLI, Inworld, Volcengine, ElevenLabs v3)
+- **Plugin cold registry:** Persisted registry eliminates broad manifest scans, faster boot, deterministic provider discovery
+- **OpenTelemetry expansion:** Spans across model calls, token usage, tool loops, harness runs, exec, delivery, context assembly, memory pressure; Prometheus scrape plugin; W3C traceparent propagation
+- **Browser automation:** Iframe-aware role snapshots, safe tab URLs, CDP readiness tuning for slow hosts, headless one-shot launch, `doctor --deep` probing
+- **Control UI:** PWA install + Web Push notifications, Crestodian TUI first-run setup, context mode selector
+- **Google Meet:** Calendar-backed attendance export workflows, meeting record tools
+
+#### Fixes
+- **DeepSeek V4:** Venice passthrough fix for `reasoning_content` replay turns (eliminates need for local patch)
+- **Cron hardening:** Jobs interrupted by restart recorded as failed, one-shots disabled after interruption
+- **Install hardening:** Windows/macOS/Linux/Docker improvements, Node service restarts, LaunchAgent token rotation, mixed-version gateway verification
+- **Bonjour/mDNS:** Broken plugin self-disables after repeated failures (EverClaw also auto-disables preemptively)
+
+#### Security
+- Device token scope containment (pairing-only sessions can't mutate operator tokens)
+- Configured redaction patterns now applied to persisted session transcripts
+- Gateway rejects older binary from mutating newer-version services
+
+(References: https://github.com/openclaw/openclaw/releases/tag/v2026.4.24, https://github.com/openclaw/openclaw/releases/tag/v2026.4.25)
+
 ## [2026.4.25.1719] - 2026-04-25
 
 ### Added — BACK-006: First-Run Security Guidance Banner

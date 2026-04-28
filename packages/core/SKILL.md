@@ -1,6 +1,6 @@
 ---
 name: everclaw
-version: 2026.4.25.0441
+version: 2026.4.28.0145
 description: Open-source first AI inference — GLM-5 as default, Claude as fallback only. Own your inference forever via the [REDACTED] decentralized network. Stake MOR tokens, access GLM-5, GLM-4.7 Flash, Kimi K2.5, and 30+ models with persistent inference by recycling staked MOR. Open-source first model router routes all tiers to [REDACTED] by default — Claude only kicks in as an escape hatch when needed. Includes [REDACTED] API Gateway bootstrap for zero-config startup, OpenAI-compatible proxy with auto-session management, automatic retry with fresh sessions, OpenAI-compatible error classification to prevent cooldown cascades, multi-key auth rotation v2 with proactive DIEM balance monitoring and reactive 402 watchdog, Gateway Guardian v5 with direct curl inference probes (eliminates Signal spam), proactive Venice DIEM credit monitoring, circuit breaker for stuck sub-agents, nuclear self-healing restart, always-on proxy-router with launchd auto-restart, smart session archiver, three-shift cyclic execution engine (v2 with 15-minute execution loops), 24/7 always-on power configuration for macOS, bundled security skills, zero-dependency wallet management via macOS Keychain, x402 payment client for agent-to-agent USDC payments, ERC-8004 agent registry reader for discovering trustless agents on Base, and hardware-aware local Ollama fallback with auto model selection (Gemma 4 family: E2B/E4B/26B/31B with vision + audio, based on available RAM/GPU).
 homepage: https://everclaw.com
 metadata:
@@ -2477,7 +2477,7 @@ backup.tar.zst.age (AGE encrypted)
   "components": ["openclaw", "morpheus", "everclaw"],
   "sizes": { "openclaw": 5242880, "morpheus": 1048576, "everclaw": 4096 },
   "checksums": { "openclaw": "sha256:...", "morpheus": "sha256:..." },
-  "versions": { "openclaw": "2026.4.23", "everclaw": "2026.4.24.1832" }
+  "versions": { "openclaw": "2026.4.25", "everclaw": "2026.4.28.0145" }
 }
 ```
 
@@ -2847,6 +2847,22 @@ node scripts/buddy-export.mjs --import ~/alice-backup.tar.gz --force
 ---
 
 ## Changelog
+
+### 2026.4.28.0145
+- **OpenClaw pin** v2026.4.23 → v2026.4.25
+- **Bonjour/mDNS crash mitigation** — OpenClaw v2026.4.24 shipped a broken bonjour (mDNS/CIAO) plugin. EverClaw auto-disables it and cleans corrupted `plugin-runtime-deps` before gateway startup. (Ref: openclaw/openclaw#70232)
+- **Upstream highlights (v2026.4.24 + v2026.4.25):**
+  - TTS: `/tts latest` read-aloud, `/tts chat on|off` session-scoped auto-TTS, per-agent voice overrides, 6 new providers (Azure Speech, Xiaomi, Local CLI, Inworld, Volcengine, ElevenLabs v3)
+  - Plugins: Cold persisted registry — eliminates broad manifest scans, faster boot, deterministic provider discovery
+  - OTEL: Expanded telemetry across model calls, token usage, tool loops, harness runs, exec, delivery, context assembly, memory pressure; Prometheus scrape plugin; W3C traceparent propagation
+  - Browser: Iframe-aware role snapshots, safe tab URLs, CDP readiness tuning, headless one-shot launch, `doctor --deep`
+  - Control UI: PWA install + Web Push notifications, Crestodian TUI setup, context mode selector
+  - Google Meet: Calendar-backed attendance export, meeting record tools
+  - DeepSeek V4: Venice passthrough fix for `reasoning_content` replay turns
+  - Install: Windows/macOS/Linux/Docker hardening, Node service restarts, LaunchAgent token rotation
+  - Cron: Jobs interrupted by restart recorded as failed, one-shots disabled after interruption
+  - Security: Device token scope containment, redaction patterns on transcripts, mixed-version gateway detection
+  - (References: https://github.com/openclaw/openclaw/releases/tag/v2026.4.24, https://github.com/openclaw/openclaw/releases/tag/v2026.4.25)
 
 ### 2026.4.24.1832
 - **OpenClaw pin** v2026.4.21 → v2026.4.23
