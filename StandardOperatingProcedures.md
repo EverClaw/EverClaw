@@ -8,8 +8,8 @@
 
 The following SOPs are maintained locally and not published to public repositories:
 
-- **SOP-001** — EverClaw Development & Deployment Pipeline
-- **SOP-005** — OpenClaw Version Pin Bumps
+- **SOP-001** — Morpheus Skill Development & Deployment Pipeline
+- **SOP-005** — OpenClaw Version Pin Bumps (Morpheus Skill)
 - **SOP-006** — MOR Staking & Session Management
 
 For the current version of any internal SOP, contact the project maintainer.
