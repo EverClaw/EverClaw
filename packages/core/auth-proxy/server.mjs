@@ -30,6 +30,13 @@
  *   PRIVY_VERIFICATION_KEY  — Privy ES256 verification key (PEM or JWK, public key)
  *   OPENCLAW_OWNER_PRIVY_ID — Owner's Privy DID (did:privy:xxx)
  *
+ * CIG Integration (optional — when set, routes inference through the Central
+ * Inference Gateway instead of the in-container Morpheus key):
+ *   CIG_MINT_URL            — mint-cig-token endpoint URL
+ *   CIG_BINDING_SECRET      — Per-deployment binding secret (from deployments table)
+ *   CIG_CONTAINER_FQDN      — This container's public FQDN (e.g. agent.example.com)
+ *   CIG_INFERENCE_URL       — cig-inference endpoint URL (overrides OpenClaw model base URL)
+ *
  * Optional:
  *   AUTH_PROXY_PORT          — Port to listen on (default: 18789)
  *   OPENCLAW_INTERNAL_PORT   — OpenClaw internal port (default: 18790)
@@ -65,6 +72,130 @@ const CONFIG = {
 const PRIVY_ISSUER = 'privy.io';
 const COOKIE_NAME = 'everclaw_session';
 const MAX_BODY_BYTES = 16384; // 16 KB limit for POST bodies
+
+// ─── CIG (Central Inference Gateway) Integration ─────────────────────────────
+// When CIG_MINT_URL + CIG_BINDING_SECRET + CIG_CONTAINER_FQDN are all set,
+// the auth-proxy mints short-lived CIG tokens and routes model API calls
+// through the CIG instead of the in-container Morpheus key. This removes the
+// shared Morpheus key from user containers entirely.
+//
+// Token lifecycle:
+//   - Mint on first model API call (or when cached token is about to expire)
+//   - Use Service mode (fqdn + binding_secret, no Privy JWT needed)
+//   - Cache in memory with TTL tracking
+//   - Refresh at 80% of TTL (8 min before 10 min expiry)
+//   - On mint failure: fall through to legacy proxy (graceful degradation)
+
+const CIG_CONFIG = {
+  mintUrl: process.env.CIG_MINT_URL || '',
+  bindingSecret: process.env.CIG_BINDING_SECRET || '',
+  containerFqdn: process.env.CIG_CONTAINER_FQDN || '',  // Auto-detected from Host header if empty
+  inferenceUrl: process.env.CIG_INFERENCE_URL || '',
+};
+
+// Track auto-detected FQDN (from first request's Host header)
+let detectedFqdn = '';
+
+const CIG_ENABLED = !!(CIG_CONFIG.mintUrl && CIG_CONFIG.bindingSecret && CIG_CONFIG.containerFqdn && CIG_CONFIG.inferenceUrl);
+
+// When CIG_FAIL_CLOSED=true, if CIG token minting fails, return 503 instead
+// of falling back to the legacy in-container Morpheus key. Recommended for
+// production: ensures the shared key is never used when CIG is expected.
+// When false (default): graceful degradation — falls back to legacy proxy on
+// mint failure. Useful during migration/testing.
+const CIG_FAIL_CLOSED = process.env.CIG_FAIL_CLOSED === 'true';
+
+// In-memory CIG token cache
+let cigTokenCache = {
+  token: null,       // The CIG JWT string
+  expiresAt: 0,     // Unix timestamp (ms) when token expires
+  refreshing: false, // Mutex: prevent concurrent refresh calls
+};
+
+const CIG_TOKEN_TTL_MS = 600_000;  // 10 min (must match mint-cig-token TOKEN_TTL_SECONDS)
+const CIG_REFRESH_MARGIN = 0.2;    // Refresh at 80% of TTL (2 min before expiry)
+
+// Get the container FQDN (from env or auto-detected from Host header)
+function getContainerFqdn() {
+  return CIG_CONFIG.containerFqdn || detectedFqdn;
+}
+
+async function mintCigToken() {
+  if (!CIG_ENABLED) return null;
+
+  // Need FQDN to mint — if not yet detected, return null (will be set on first request)
+  const fqdn = getContainerFqdn();
+  if (!fqdn) {
+    console.warn('[cig] Cannot mint token: FQDN not yet detected');
+    return null;
+  }
+
+  const now = Date.now();
+  const refreshAt = cigTokenCache.expiresAt - (CIG_TOKEN_TTL_MS * CIG_REFRESH_MARGIN);
+
+  // Return cached token if still valid and not time to refresh.
+  if (cigTokenCache.token && now < refreshAt) {
+    return cigTokenCache.token;
+  }
+
+  // Prevent stampede: if a refresh is already in flight, wait briefly and return
+  // whatever we have (even if slightly stale, as long as not expired).
+  if (cigTokenCache.refreshing) {
+    // Wait up to 2s for the in-flight refresh to complete.
+    for (let i = 0; i < 20; i++) {
+      await new Promise(r => setTimeout(r, 100));
+      if (!cigTokenCache.refreshing && cigTokenCache.token && Date.now() < cigTokenCache.expiresAt) {
+        return cigTokenCache.token;
+      }
+    }
+    // Still refreshing — return stale token if not expired.
+    if (cigTokenCache.token && Date.now() < cigTokenCache.expiresAt) {
+      return cigTokenCache.token;
+    }
+    return null; // Can't mint right now.
+  }
+
+  cigTokenCache.refreshing = true;
+  try {
+    console.log('[cig] Minting CIG token (service mode)...');
+
+    const resp = await fetch(CIG_CONFIG.mintUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        fqdn: getContainerFqdn(),
+        binding_secret: CIG_CONFIG.bindingSecret,
+      }),
+    });
+
+    if (!resp.ok) {
+      const errText = await resp.text().catch(() => '');
+      console.error(`[cig] Mint failed: HTTP ${resp.status} ${errText.slice(0, 200)}`);
+      return cigTokenCache.token && Date.now() < cigTokenCache.expiresAt
+        ? cigTokenCache.token  // Return stale token if available
+        : null;                // No token available
+    }
+
+    const data = await resp.json();
+    if (!data.token) {
+      console.error('[cig] Mint response missing token:', JSON.stringify(data).slice(0, 200));
+      return null;
+    }
+
+    cigTokenCache.token = data.token;
+    cigTokenCache.expiresAt = now + (data.expires_in || 600) * 1000;
+    console.log(`[cig] Token minted, expires in ${data.expires_in}s`);
+    return cigTokenCache.token;
+  } catch (err) {
+    console.error('[cig] Mint error:', err.message);
+    return cigTokenCache.token && Date.now() < cigTokenCache.expiresAt
+      ? cigTokenCache.token
+      : null;
+  } finally {
+    cigTokenCache.refreshing = false;
+  }
+}
+
 
 // ─── Rate Limiter (in-memory, per-IP) ────────────────────────────────────────
 // Sliding window: max AUTH_RATE_LIMIT attempts per AUTH_RATE_WINDOW_MS per IP.
@@ -346,6 +477,140 @@ proxy.on('error', (error, req, res) => {
 
 // ─── Request Handler ─────────────────────────────────────────────────────────
 
+// ─── CIG Proxy Helpers ─────────────────────────────────────────────────────
+// When CIG is enabled, model API calls are proxied to the CIG service instead
+// of OpenClaw directly. The CIG holds the master Morpheus key and enforces
+// per-user budgets, metering, and revocation.
+
+function isModelApiCall(pathname) {
+  // OpenAI-compatible model API paths that should go through CIG.
+  // Note: /v1/models is a GET and doesn't require a CIG token (cig-inference
+  // allows unauthenticated access to /v1/models), but we route it through
+  // CIG anyway for consistency and to avoid exposing the Morpheus key.
+  return pathname === '/v1/chat/completions' ||
+         pathname === '/v1/models' ||
+         pathname.startsWith('/v1/chat/completions/');  // potential future sub-paths
+}
+
+async function handleCigProxy(req, res, session) {
+  // Auto-detect FQDN from Host header if not configured
+  if (!CIG_CONFIG.containerFqdn && !detectedFqdn) {
+    const host = req.headers.host || '';
+    // Strip port if present, normalize to lowercase
+    const fqdn = host.split(':')[0].toLowerCase();
+    if (fqdn && fqdn !== 'localhost' && !fqdn.match(/^\d+\.\d+\.\d+\.\d+$/)) {
+      detectedFqdn = fqdn;
+      console.log(`[cig] Auto-detected FQDN from Host header: ${fqdn}`);
+    }
+  }
+
+  const cigToken = await mintCigToken();
+  if (!cigToken) {
+    if (CIG_FAIL_CLOSED) {
+      if (!res.headersSent) {
+        res.writeHead(503, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: { message: 'inference_unavailable', type: 'server_error' } }));
+      }
+      return;
+    }
+    console.warn('[cig] No CIG token available — falling back to legacy proxy');
+    proxy.web(req, res);
+    return;
+  }
+
+  const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+  const cigUrl = `${CIG_CONFIG.inferenceUrl}${url.pathname}${url.search || ''}`;
+
+  // Collect request body for forwarding.
+  const body = await collectBody(req);
+  if (body === null) {
+    // Body too large or read error.
+    if (!res.headersSent) {
+      res.writeHead(413, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: { message: 'request_entity_too_large', type: 'invalid_request' } }));
+    }
+    return;
+  }
+
+  // Build headers for CIG.
+  const cigHeaders = {
+    'Content-Type': req.headers['content-type'] || 'application/json',
+    'Authorization': `Bearer ${cigToken}`,
+    'X-Container-Fqdn': getContainerFqdn(),
+    'X-Forwarded-User': session.sub,
+  };
+
+  try {
+    const cigResp = await fetch(cigUrl, {
+      method: req.method,
+      headers: cigHeaders,
+      body: req.method !== 'GET' ? body : undefined,
+    });
+
+    // Stream the response back.
+    const respHeaders = {};
+    for (const [key, value] of cigResp.headers.entries()) {
+      // Forward all headers except transfer-encoding (node handles chunking).
+      if (key.toLowerCase() !== 'transfer-encoding') {
+        respHeaders[key] = value;
+      }
+    }
+
+    res.writeHead(cigResp.status, respHeaders);
+
+    if (cigResp.body) {
+      const reader = cigResp.body.getReader();
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          res.write(value);
+        }
+      } catch (streamErr) {
+        console.error('[cig] Stream read error:', streamErr.message);
+      } finally {
+        reader.cancel().catch(() => {});
+      }
+    }
+
+    res.end();
+  } catch (err) {
+    console.error('[cig] Proxy error:', err.message);
+    if (!res.headersSent) {
+      res.writeHead(502, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: { message: 'cig_upstream_error', type: 'server_error' } }));
+    } else {
+      res.end();
+    }
+  }
+}
+
+function collectBody(req) {
+  return new Promise((resolve) => {
+    const chunks = [];
+    let size = 0;
+    const limit = 10 * 1024 * 1024; // 10 MB for model payloads (larger than auth bodies)
+
+    req.on('data', (chunk) => {
+      size += chunk.length;
+      if (size > limit) {
+        req.destroy();
+        resolve(null);
+        return;
+      }
+      chunks.push(chunk);
+    });
+
+    req.on('end', () => {
+      resolve(Buffer.concat(chunks));
+    });
+
+    req.on('error', () => {
+      resolve(null);
+    });
+  });
+}
+
 async function handleRequest(req, res) {
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
   const pathname = url.pathname;
@@ -458,6 +723,14 @@ async function handleRequest(req, res) {
   // Inject verified user identity for OpenClaw trusted-proxy mode
   req.headers['x-forwarded-user'] = session.sub;
 
+  // ── CIG routing: intercept model API calls ──
+  // When CIG is enabled, requests to /v1/chat/completions and /v1/models
+  // are routed through the Central Inference Gateway instead of the
+  // in-container Morpheus key. The CIG holds the master key server-side.
+  if (CIG_ENABLED && isModelApiCall(pathname)) {
+    return handleCigProxy(req, res, session);
+  }
+
   proxy.web(req, res);
 }
 
@@ -507,6 +780,14 @@ async function main() {
   server.listen(CONFIG.proxyPort, '0.0.0.0', () => {
     console.log(`✅ Auth proxy listening on :${CONFIG.proxyPort}`);
     console.log(`   Proxying authenticated requests to OpenClaw :${CONFIG.internalPort}`);
+    if (CIG_ENABLED) {
+      console.log(`   CIG mode: ENABLED`);
+      console.log(`   CIG mint: ${CIG_CONFIG.mintUrl}`);
+      console.log(`   CIG inference: ${CIG_CONFIG.inferenceUrl}`);
+      console.log(`   Container FQDN: ${CIG_CONFIG.containerFqdn}`);
+    } else {
+      console.log(`   CIG mode: disabled (set CIG_MINT_URL + CIG_BINDING_SECRET + CIG_CONTAINER_FQDN + CIG_INFERENCE_URL to enable)`);
+    }
     console.log('');
   });
 
