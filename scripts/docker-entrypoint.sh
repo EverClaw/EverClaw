@@ -281,21 +281,27 @@ fi
 # external Morpheus API. The auth-proxy mints CIG tokens using the binding_secret and
 # forwards to the CIG inference gateway server-side.
 #
-# CIG env vars (all required to enable CIG mode):
-#   CIG_MINT_URL        → mint-cig-token endpoint URL
-#   CIG_BINDING_SECRET  → Per-container binding secret
-#   CIG_INFERENCE_URL   → cig-inference endpoint URL
-#   CIG_CONTAINER_FQDN  → This container's public FQDN (used by auth-proxy)
+# CIG env vars (3 required, 1 optional to enable CIG mode):
+#   CIG_MINT_URL        → mint-cig-token endpoint URL (required)
+#   CIG_BINDING_SECRET  → Per-container binding secret (required)
+#   CIG_INFERENCE_URL   → cig-inference endpoint URL (required)
+#   CIG_CONTAINER_FQDN  → Container's public FQDN (optional — auto-detected from Host header if not set)
 #
 # The auth-proxy port is configurable via AUTH_PROXY_PORT (default 18789).
 
+# CIG mode requires 3 core vars; FQDN is optional (auto-detected from Host header if not set).
+# This allows buffer pool provisioning where FQDN isn't known until after lease creation.
 CIG_ENABLED=false
-if [ -n "${CIG_MINT_URL:-}" ] && [ -n "${CIG_BINDING_SECRET:-}" ] && [ -n "${CIG_INFERENCE_URL:-}" ] && [ -n "${CIG_CONTAINER_FQDN:-}" ]; then
+if [ -n "${CIG_MINT_URL:-}" ] && [ -n "${CIG_BINDING_SECRET:-}" ] && [ -n "${CIG_INFERENCE_URL:-}" ]; then
   CIG_ENABLED=true
-  echo "🔐 CIG mode detected — routing inference through auth-proxy"
+  if [ -n "${CIG_CONTAINER_FQDN:-}" ]; then
+    echo "🔐 CIG mode detected — routing inference through auth-proxy (FQDN: ${CIG_CONTAINER_FQDN})"
+  else
+    echo "🔐 CIG mode detected — routing inference through auth-proxy (FQDN: auto-detect from Host header)"
+  fi
 elif [ -n "${CIG_MINT_URL:-}" ] || [ -n "${CIG_BINDING_SECRET:-}" ] || [ -n "${CIG_INFERENCE_URL:-}" ]; then
   # Partial CIG config — warn loudly so it doesn't silently fall back to direct mode
-  echo "⚠️  Partial CIG config detected — CIG mode NOT enabled. Required: CIG_MINT_URL, CIG_BINDING_SECRET, CIG_INFERENCE_URL, CIG_CONTAINER_FQDN"
+  echo "⚠️  Partial CIG config detected — CIG mode NOT enabled. Required: CIG_MINT_URL, CIG_BINDING_SECRET, CIG_INFERENCE_URL"
 fi
 
 if [ "$CIG_ENABLED" = "true" ] && jq . "$CONFIG_FILE" > /dev/null 2>&1; then

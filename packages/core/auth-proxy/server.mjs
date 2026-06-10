@@ -103,8 +103,9 @@ const MAX_BODY_BYTES = 16384; // 16 KB limit for POST bodies
 const CIG_CONFIG = {
   mintUrl: process.env.CIG_MINT_URL || '',
   bindingSecret: process.env.CIG_BINDING_SECRET || '',
-  containerFqdn: process.env.CIG_CONTAINER_FQDN || '',  // Required when CIG enabled
+  containerFqdn: process.env.CIG_CONTAINER_FQDN || '',  // Auto-detected from Host header if not set
   inferenceUrl: process.env.CIG_INFERENCE_URL || '',
+  fqdnLocked: !!process.env.CIG_CONTAINER_FQDN,  // Once set (env or auto-detected), don't change
 };
 
 const CIG_ENABLED = !!(CIG_CONFIG.mintUrl && CIG_CONFIG.bindingSecret && CIG_CONFIG.inferenceUrl);
@@ -135,9 +136,25 @@ function timingSafeEqualStr(a, b) {
   return timingSafeEqual(ab, bb);
 }
 
-// Get the container FQDN (always from env — required when CIG is enabled)
+// Get the container FQDN. If not set via env, auto-detect from first request's Host header.
+// Once set (either way), it's locked and won't change — this prevents Host header spoofing
+// after initial detection.
 function getContainerFqdn() {
   return CIG_CONFIG.containerFqdn;
+}
+
+// Auto-detect FQDN from Host header (one-time, only if not already set)
+// Call this early in request handling for CIG-enabled containers without env FQDN.
+function maybeAutoDetectFqdn(reqHost) {
+  if (CIG_CONFIG.fqdnLocked || !CIG_ENABLED) return;
+  if (!reqHost || reqHost === 'localhost' || reqHost.startsWith('127.') || reqHost.startsWith('[::1]')) return;
+  // Strip port if present
+  const fqdn = reqHost.split(':')[0];
+  if (fqdn && fqdn.includes('.')) {
+    CIG_CONFIG.containerFqdn = fqdn;
+    CIG_CONFIG.fqdnLocked = true;
+    console.log(`[cig] Auto-detected container FQDN from Host header: ${fqdn}`);
+  }
 }
 
 async function mintCigToken() {
@@ -145,8 +162,10 @@ async function mintCigToken() {
 
   const fqdn = getContainerFqdn();
   if (!fqdn) {
-    // This should never happen — CIG_CONTAINER_FQDN is required at startup
-    console.error('[cig] Cannot mint token: CIG_CONTAINER_FQDN is empty');
+    // FQDN not yet auto-detected — this can happen on the very first request before
+    // maybeAutoDetectFqdn() has been called. Return null to skip CIG for this request;
+    // subsequent requests will have the FQDN.
+    console.warn('[cig] Cannot mint token: FQDN not yet detected (will auto-detect from Host header)');
     return null;
   }
 
@@ -275,11 +294,11 @@ function validateConfig() {
     required.push(['OPENCLAW_OWNER_PRIVY_ID', CONFIG.ownerPrivyId]);
   }
 
-  // CIG requires CIG_CONTAINER_FQDN in production (no Host-header auto-detection)
+  // CIG without FQDN: warn but allow (FQDN will be auto-detected from first request Host header).
+  // This is needed for buffer pool provisioning where FQDN isn't known until after lease creation.
   if (CIG_ENABLED && !CIG_CONFIG.containerFqdn) {
-    console.error('❌ CIG enabled but CIG_CONTAINER_FQDN not set — this is required for security.');
-    console.error('   Set CIG_CONTAINER_FQDN to this container\'s public FQDN.');
-    process.exit(1);
+    console.warn('⚠️  CIG enabled but CIG_CONTAINER_FQDN not set — will auto-detect from first request Host header.');
+    console.warn('   For production, set CIG_CONTAINER_FQDN explicitly for tighter security.');
   }
 
   // Validate CIG URLs are well-formed at startup (fail fast, not on first inference)
@@ -724,6 +743,9 @@ function collectBody(req) {
 async function handleRequest(req, res) {
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
   const pathname = url.pathname;
+
+  // Auto-detect container FQDN from Host header (one-time, for buffer pool flow)
+  maybeAutoDetectFqdn(req.headers.host);
 
   // ── Health check (no auth) ──
   if (pathname === '/health') {
