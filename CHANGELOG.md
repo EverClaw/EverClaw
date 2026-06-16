@@ -59,11 +59,13 @@ All notable changes to EverClaw are documented here.
   - `install-utils.sh` — Logging, platform detection, size estimation
 
 - **Docker Optimized Image** (`everclaw-docker/Dockerfile.optimized`):
-  - Multi-stage build for smaller image size
+  - Multi-stage build for smaller image size (~900 MB total)
   - Node 20-slim base (avoids Node.js v25 SSE bugs)
+  - Includes: signal-cli 0.14.5 + Java 21, GitHub CLI, Brave Browser, Whisper, ffmpeg
   - Pre-configured for containerized operation (bind 0.0.0.0, Morpheus provider)
   - Non-root user for security
   - Health check endpoint
+  - No Ollama/local models (uses Morpheus P2P for inference)
 
 - **Signal Troubleshooting Docs** (`docs/docs/operations/signal-troubleshooting.md`):
   - signal-cli ≥0.14.3 requirement documented
