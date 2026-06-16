@@ -39,12 +39,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean
 
 # ============================================================
-# Stage 1b: Install Java 21 (for signal-cli)
+# Stage 1b: Install Java 21 (for signal-cli) via Adoptium/Temurin
 # ============================================================
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    openjdk-21-jre-headless \
-    && rm -rf /var/lib/apt/lists/* \
-    && apt-get clean
+RUN curl -fsSL https://packages.adoptium.net/artifactory/api/gpg/key/public | gpg --dearmor -o /usr/share/keyrings/adoptium.gpg \
+    && echo "deb [signed-by=/usr/share/keyrings/adoptium.gpg] https://packages.adoptium.net/artifactory/deb bookworm main" | tee /etc/apt/sources.list.d/adoptium.list > /dev/null \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends temurin-21-jre \
+    && rm -rf /var/lib/apt/lists/*
 
 # ============================================================
 # Stage 1c: Install signal-cli
@@ -76,9 +77,12 @@ RUN curl -fsSLo /usr/share/keyrings/brave-browser-archive-keyring.gpg \
     && rm -rf /var/lib/apt/lists/*
 
 # ============================================================
-# Stage 1f: Install Whisper (Python package, model downloads on demand)
+# Stage 1f: Install Whisper (CPU-only, model downloads on demand)
 # ============================================================
-RUN pip3 install --no-cache-dir --break-system-packages openai-whisper
+# Install CPU-only torch first to avoid huge CUDA dependencies
+RUN pip3 install --no-cache-dir --break-system-packages \
+    torch --index-url https://download.pytorch.org/whl/cpu \
+    && pip3 install --no-cache-dir --break-system-packages openai-whisper
 
 # ============================================================
 # Stage 2: OpenClaw installation
@@ -99,8 +103,8 @@ FROM base AS runtime
 COPY --from=openclaw /usr/local/lib/node_modules/openclaw /usr/local/lib/node_modules/openclaw
 COPY --from=openclaw /usr/local/bin/openclaw /usr/local/bin/openclaw
 
-# Create non-root user for security
-RUN useradd -m -s /bin/bash -u 1000 agent \
+# Create non-root user for security (use UID 1001 since 1000 is taken by node)
+RUN useradd -m -s /bin/bash -u 1001 agent \
     && mkdir -p /home/agent/.openclaw \
     && chown -R agent:agent /home/agent
 
