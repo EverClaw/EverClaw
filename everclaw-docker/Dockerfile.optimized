@@ -1,0 +1,115 @@
+# MorpheusSkill Docker Container (Optimized)
+# For InstallOpenClaw.xyz and containerized deployments
+#
+# Build:
+#   docker build -f Dockerfile.optimized -t ghcr.io/everclaw/morpheus-skill:latest .
+#
+# Run:
+#   docker run -d --name morpheus-agent \
+#     -e OPENCLAW_TOKEN=your_token \
+#     -p 18789:18789 \
+#     ghcr.io/everclaw/morpheus-skill:latest
+
+# ============================================================
+# Stage 1: Base with system dependencies
+# ============================================================
+FROM node:20-slim AS base
+
+# Avoid prompts during package installation
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install system dependencies
+# - curl: HTTP requests, health checks
+# - git: skill installation, updates
+# - jq: JSON processing
+# - ca-certificates: HTTPS
+# - ffmpeg: audio/video processing (voice notes, video frames)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    git \
+    jq \
+    ca-certificates \
+    ffmpeg \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
+
+# ============================================================
+# Stage 2: OpenClaw installation
+# ============================================================
+FROM base AS openclaw
+
+# Install OpenClaw globally
+ARG OPENCLAW_VERSION=latest
+RUN npm install -g openclaw@${OPENCLAW_VERSION} --omit=dev \
+    && npm cache clean --force
+
+# ============================================================
+# Stage 3: Final runtime image
+# ============================================================
+FROM base AS runtime
+
+# Copy OpenClaw from build stage
+COPY --from=openclaw /usr/local/lib/node_modules/openclaw /usr/local/lib/node_modules/openclaw
+COPY --from=openclaw /usr/local/bin/openclaw /usr/local/bin/openclaw
+
+# Create non-root user for security
+RUN useradd -m -s /bin/bash -u 1000 agent \
+    && mkdir -p /home/agent/.openclaw \
+    && chown -R agent:agent /home/agent
+
+# Set working directory
+WORKDIR /home/agent
+
+# Switch to non-root user
+USER agent
+
+# Environment variables
+ENV NODE_ENV=production
+ENV HOME=/home/agent
+ENV OPENCLAW_DATA_DIR=/home/agent/.openclaw
+
+# Default config for containerized operation
+# - Bind to all interfaces (required for container networking)
+# - Disable device pairing (no direct device access in containers)
+# - Configure for API-based channels only
+RUN mkdir -p /home/agent/.openclaw && \
+    echo '{ \
+      "gateway": { \
+        "port": 18789, \
+        "bind": "0.0.0.0" \
+      }, \
+      "channels": {}, \
+      "providers": { \
+        "morpheus": { \
+          "type": "openai-compatible", \
+          "baseURL": "http://host.docker.internal:3333/v1", \
+          "apiKey": "morpheus" \
+        } \
+      }, \
+      "agents": { \
+        "defaults": { \
+          "model": { \
+            "primary": "morpheus/glm-5" \
+          } \
+        } \
+      } \
+    }' > /home/agent/.openclaw/openclaw.json
+
+# Expose gateway port
+EXPOSE 18789
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+    CMD curl -sf http://localhost:18789/health || exit 1
+
+# Default command
+CMD ["openclaw", "gateway", "--port", "18789"]
+
+# ============================================================
+# Labels
+# ============================================================
+LABEL org.opencontainers.image.title="MorpheusSkill"
+LABEL org.opencontainers.image.description="Decentralized AI agent with Morpheus inference"
+LABEL org.opencontainers.image.source="https://github.com/profbernardoj/morpheus-skill"
+LABEL org.opencontainers.image.documentation="https://everclaw.xyz"
+LABEL org.opencontainers.image.licenses="MIT"

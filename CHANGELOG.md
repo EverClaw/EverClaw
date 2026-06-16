@@ -37,6 +37,54 @@ All notable changes to EverClaw are documented here.
 - Defense-in-depth: `verify-owner` call on success path
 - POST body delivery (not URL query param) prevents token leakage in browser history/referer
 
+## [2026.6.16.2136] - 2026-06-16
+
+### Added
+
+- **Tiered Installer** (`scripts/install-tiered.sh`): New unified installer with three tiers:
+  - **Minimal** (default): Core deps only — Node.js 24.x LTS, jq, git, curl, Morpheus proxy (~200MB)
+  - **Standard** (`--standard`): + Ollama/Gemma 4 12B, Signal, ffmpeg (~8.6GB)
+  - **Full** (`--full`): + Brave, Whisper, Gemma 4 26B, GitHub CLI, all channels (~19.6GB)
+  - **Custom** (`--with X,Y,Z`): Pick specific components
+  - Supports `--dry-run` to preview without installing and `--list` to show available components
+
+- **Component Libraries** (`scripts/lib/`):
+  - `install-core.sh` — Node.js, jq, git, curl with Homebrew/apt/dnf/pacman support
+  - `install-ollama.sh` — Ollama engine + model downloads (Gemma 4 12B, Gemma 4 26B)
+  - `install-signal.sh` — signal-cli with Java 21, version checking (≥0.14.3 required)
+  - `install-media.sh` — ffmpeg, Whisper (mlx-whisper on Apple Silicon), yt-dlp
+  - `install-browser.sh` — Brave Browser for web automation
+  - `install-channels.sh` — Setup instructions for Telegram, Discord, Slack, Matrix
+  - `install-dev.sh` — GitHub CLI for repository and issue management
+  - `install-utils.sh` — Logging, platform detection, size estimation
+
+- **Docker Optimized Image** (`everclaw-docker/Dockerfile.optimized`):
+  - Multi-stage build for smaller image size
+  - Node 20-slim base (avoids Node.js v25 SSE bugs)
+  - Pre-configured for containerized operation (bind 0.0.0.0, Morpheus provider)
+  - Non-root user for security
+  - Health check endpoint
+
+- **Signal Troubleshooting Docs** (`docs/docs/operations/signal-troubleshooting.md`):
+  - signal-cli ≥0.14.3 requirement documented
+  - Node.js v25 SSE bug warning and workarounds
+  - Common issues: inbound not working, NullPointerException, SSE drops
+  - Verification commands and container mode alternative
+
+### Security
+
+- signal-cli Linux installer now uses jq for safe JSON parsing (with grep/sed fallback)
+- Added file type validation before extracting downloaded archives
+- Graceful process termination (SIGTERM before SIGKILL) in troubleshooting docs
+
+### Fixed
+
+- Pure bash `format_size()` implementation (no bc dependency)
+- Component name trimming for `--with` flag (handles spaces)
+- Proxy installation error handling with proper exit code capture
+
+---
+
 ## [2026.5.28.1854] - 2026-05-28
 
 ### OpenClaw Pin Bump v2026.5.22 → v2026.5.27
