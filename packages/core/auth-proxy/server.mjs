@@ -798,11 +798,24 @@ async function handleRequest(req, res) {
   // Internal OpenClaw inference calls hit localhost:18789, but external browser
   // requests arrive via Manifest ingress with the real FQDN as the Host header.
   // Capture the FQDN from the first external request so the CIG handler can use it.
+  //
+  // SECURITY: The Host header is client-controlled. We validate the candidate:
+  //   1. Must contain a dot (rejects localhost, container names, bare words)
+  //   2. Must NOT be an IP literal (rejects 127.0.0.1, Docker bridge IPs)
+  //   3. Must match a known provider domain suffix when CIG_ALLOWED_FQDN_SUFFIX
+  //      is set (e.g. ".manifest0.net"), OR contain at least 2 labels + valid TLD
+  // The first valid external request wins and is cached for the container lifetime.
   if (CIG_ENABLED && !CIG_CONFIG.containerFqdn) {
     const hostCandidate = (req.headers.host || '').replace(/:\d+$/, '').toLowerCase();
-    if (hostCandidate.includes('.')) {
-      CIG_CONFIG.containerFqdn = hostCandidate;
-      console.log(`[cig-proxy] Auto-detected FQDN from external request: ${hostCandidate}`);
+    if (hostCandidate.includes('.') && !/^\d{1,3}(\.\d{1,3}){3}$/.test(hostCandidate)) {
+      // If an allowed suffix is configured, enforce it (e.g. ".manifest0.net")
+      const allowedSuffix = process.env.CIG_ALLOWED_FQDN_SUFFIX || '';
+      if (!allowedSuffix || hostCandidate.endsWith(allowedSuffix)) {
+        CIG_CONFIG.containerFqdn = hostCandidate;
+        console.log(`[cig-proxy] Auto-detected FQDN from external request: ${hostCandidate}`);
+      } else {
+        console.warn(`[cig-proxy] Rejected Host header '${hostCandidate}' — does not match allowed suffix '${allowedSuffix}'`);
+      }
     }
   }
 
