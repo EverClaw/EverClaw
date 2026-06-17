@@ -555,13 +555,19 @@ async function mintCigToken() {
     return cigTokenCache.token;
   }
 
-  // FQDN is required for per-container binding
+  // FQDN is required for per-container binding.
+  // Set via CIG_CONTAINER_FQDN / CONTAINER_FQDN env var, or auto-detected
+  // from external requests in handleRequest() (see FQDN auto-detection block).
   const fqdn = CIG_CONFIG.containerFqdn;
   if (!fqdn) {
     // FQDN not yet auto-detected — skip CIG for this request.
     // Subsequent requests will have the FQDN after auto-detection.
     console.warn('[cig] Cannot mint token: FQDN not yet detected (will auto-detect from Host header)');
-    throw new Error('FQDN not yet detected — awaiting auto-detection from Host header');
+    throw new Error(
+      'Container FQDN not available. Set CIG_CONTAINER_FQDN env var, ' +
+      'or ensure the user loads the chat UI before the first inference call '
+      + '(the FQDN is auto-detected from the first external HTTP request).'
+    );
   }
 
   const controller = new AbortController();
@@ -786,6 +792,18 @@ async function handleRequest(req, res) {
     });
     res.end(JSON.stringify({ success: true }));
     return;
+  }
+
+  // ── FQDN auto-detection from external requests ──
+  // Internal OpenClaw inference calls hit localhost:18789, but external browser
+  // requests arrive via Manifest ingress with the real FQDN as the Host header.
+  // Capture the FQDN from the first external request so the CIG handler can use it.
+  if (CIG_ENABLED && !CIG_CONFIG.containerFqdn) {
+    const hostCandidate = (req.headers.host || '').replace(/:\d+$/, '').toLowerCase();
+    if (hostCandidate.includes('.')) {
+      CIG_CONFIG.containerFqdn = hostCandidate;
+      console.log(`[cig-proxy] Auto-detected FQDN from external request: ${hostCandidate}`);
+    }
   }
 
   // ── CIG Proxy: Internal inference requests from OpenClaw ──
