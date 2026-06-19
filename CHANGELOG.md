@@ -2,6 +2,13 @@
 
 All notable changes to EverClaw are documented here.
 
+## [2026.6.18.2357] - 2026-06-18
+
+### Bug Fixes — Revert OpenClaw Pin + CIG Model Prefix
+
+- **Dockerfile:** Reverted `OPENCLAW_VERSION` from `v2026.6.8` → `v2026.5.27`. OpenClaw v2026.6.8 broke the SSO Session Bridge (auth-proxy trusted-proxy mode). Reverting restores SSO functionality. Update banner is suppressed via `update.checkOnStart=false` in openclaw-default.json (from v2026.6.18.2214).
+- **supabase/functions/cig-inference/index.ts:** Strip provider prefix from model name before tier check (carried forward from v2026.6.18.2214). OpenClaw sends `mor-gateway/deepseek-v4-flash` but CIG expects bare `deepseek-v4-flash`. Uses `lastIndexOf("/")` with unconditional `reqBody.model = model` normalization.
+
 ## [2026.6.18.2214] - 2026-06-18
 
 ### Bug Fixes — Update Banner + CIG Model Prefix

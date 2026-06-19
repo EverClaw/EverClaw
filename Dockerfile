@@ -50,7 +50,10 @@
 
 # ─── Stage 1: Build OpenClaw ─────────────────────────────────────────────────
 
-ARG OPENCLAW_VERSION=v2026.6.8
+# Pinned back to v2026.5.27 — v2026.6.8 broke SSO Session Bridge (auth-proxy trusted-proxy mode).
+# Do NOT re-bump without verifying SSO /auth/handoff flow works end-to-end on the new version.
+# Update banner is suppressed via update.checkOnStart=false in openclaw-default.json.
+ARG OPENCLAW_VERSION=v2026.5.27
 
 FROM node:22-bookworm AS openclaw-builder
 
