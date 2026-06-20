@@ -600,11 +600,13 @@ async function mintCigToken() {
     // FQDN not yet auto-detected — skip CIG for this request.
     // Subsequent requests will have the FQDN after auto-detection.
     console.warn('[cig] Cannot mint token: FQDN not yet detected (will auto-detect from Host header)');
-    throw new Error(
+    const err = new Error(
       'Container FQDN not available. Set CIG_CONTAINER_FQDN env var, ' +
       'or ensure the user loads the chat UI before the first inference call '
       + '(the FQDN is auto-detected from the first external HTTP request).'
     );
+    err.code = 'fqdn_not_detected';
+    throw err;
   }
 
   const controller = new AbortController();
