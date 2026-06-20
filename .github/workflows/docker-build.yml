@@ -2,7 +2,7 @@ name: Build and Push Docker Containers
 
 on:
   push:
-    branches: [main]
+    branches: [main, staging]
     tags: ['v*']
   pull_request:
     branches: [main]
@@ -132,6 +132,9 @@ jobs:
             type=match,pattern=v(.*),group=1,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
             type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
             type=raw,value=${{ steps.version.outputs.VERSION }},enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+            # Staging builds: tag as "staging" and version-staging (never overwrites latest)
+            type=raw,value=staging,enable=${{ github.ref == 'refs/heads/staging' }}
+            type=raw,value=${{ steps.version.outputs.VERSION }}-staging,enable=${{ github.ref == 'refs/heads/staging' }}
             # PR builds: tag with PR number (not pushed)
             type=ref,event=pr
 
