@@ -1,0 +1,9 @@
+{
+  "name": "Kimi Claw",
+  "slug": "kimiclaw",
+  "domain": "kamiclaw.co",
+  "description": "AI agent powered by Kimi models",
+  "remote": "https://github.com/profbernardoj/kamiclaw.co.git",
+  "defaultModel": "glm-5",
+  "persona": "Kimi-focused AI assistant"
+}

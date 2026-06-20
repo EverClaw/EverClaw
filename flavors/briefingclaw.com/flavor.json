@@ -1,0 +1,9 @@
+{
+  "name": "Briefing Claw",
+  "slug": "briefingclaw",
+  "domain": "briefingclaw.com",
+  "description": "AI agent for daily briefings and news",
+  "remote": "https://github.com/profbernardoj/briefingclaw.com.git",
+  "defaultModel": "glm-5",
+  "persona": "Briefing and intelligence AI assistant"
+}

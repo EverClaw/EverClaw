@@ -1,0 +1,9 @@
+{
+  "name": "VC Claw",
+  "slug": "vcclaw",
+  "domain": "vcclaw.org",
+  "description": "AI agent for venture capital",
+  "remote": "https://github.com/profbernardoj/vcclaw.org.git",
+  "defaultModel": "glm-5",
+  "persona": "Venture capital AI assistant"
+}

@@ -1,0 +1,9 @@
+{
+  "name": "Llama Claw",
+  "slug": "llamaclaw",
+  "domain": "llamaclaw.org",
+  "description": "AI agent powered by Llama models",
+  "remote": "https://github.com/profbernardoj/llamaclaw.org.git",
+  "defaultModel": "glm-5",
+  "persona": "Llama-focused AI assistant"
+}

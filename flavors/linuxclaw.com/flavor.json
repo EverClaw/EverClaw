@@ -1,0 +1,9 @@
+{
+  "name": "Linux Claw",
+  "slug": "linuxclaw",
+  "domain": "linuxclaw.com",
+  "description": "AI agent for Linux systems",
+  "remote": "https://github.com/profbernardoj/linuxclaw.com.git",
+  "defaultModel": "glm-5",
+  "persona": "Linux-focused AI assistant"
+}

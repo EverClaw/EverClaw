@@ -1,0 +1,9 @@
+{
+  "name": "MiniMax Claw",
+  "slug": "minimaxclaw",
+  "domain": "minimaxclaw.com",
+  "description": "AI agent powered by MiniMax models",
+  "remote": "https://github.com/profbernardoj/minimaxclaw.com.git",
+  "defaultModel": "glm-5",
+  "persona": "MiniMax-focused AI assistant"
+}

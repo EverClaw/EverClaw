@@ -1,0 +1,9 @@
+{
+  "name": "Ethereum Claw",
+  "slug": "ethereumclaw",
+  "domain": "ethereumclaw.com",
+  "description": "AI agent for Ethereum ecosystem",
+  "remote": "https://github.com/profbernardoj/ethereumclaw.com.git",
+  "defaultModel": "glm-5",
+  "persona": "Ethereum-focused AI assistant"
+}

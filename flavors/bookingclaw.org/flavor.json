@@ -1,0 +1,9 @@
+{
+  "name": "Booking Claw",
+  "slug": "bookingclaw",
+  "domain": "bookingclaw.org",
+  "description": "AI agent for travel and booking",
+  "remote": "https://github.com/profbernardoj/bookingclaw.org.git",
+  "defaultModel": "glm-5",
+  "persona": "Travel and booking AI assistant"
+}

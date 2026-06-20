@@ -1,0 +1,9 @@
+{
+  "name": "Invest Claw",
+  "slug": "investclaw",
+  "domain": "investclaw.ai",
+  "description": "AI agent for investment analysis",
+  "remote": "https://github.com/profbernardoj/investclaw.ai.git",
+  "defaultModel": "glm-5",
+  "persona": "Investment AI assistant"
+}

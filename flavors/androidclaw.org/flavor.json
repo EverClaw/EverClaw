@@ -1,0 +1,9 @@
+{
+  "name": "Android Claw",
+  "slug": "androidclaw",
+  "domain": "androidclaw.org",
+  "description": "AI agent for Android power users",
+  "remote": "https://github.com/profbernardoj/androidclaw.org.git",
+  "defaultModel": "glm-5",
+  "persona": "Android-focused AI assistant"
+}

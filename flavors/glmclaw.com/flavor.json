@@ -1,0 +1,9 @@
+{
+  "name": "GLM Claw",
+  "slug": "glmclaw",
+  "domain": "glmclaw.com",
+  "description": "AI agent powered by GLM models",
+  "remote": "https://github.com/profbernardoj/glmclaw.com.git",
+  "defaultModel": "glm-5",
+  "persona": "GLM-focused AI assistant"
+}

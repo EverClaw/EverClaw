@@ -1,0 +1,9 @@
+{
+  "name": "Morpheus Claw",
+  "slug": "morpheusclaw",
+  "domain": "morpheusclaw.com",
+  "description": "The canonical Morpheus decentralized AI agent",
+  "remote": "https://github.com/profbernardoj/morpheusclaw.com.git",
+  "defaultModel": "glm-5",
+  "persona": "Morpheus decentralized AI assistant"
+}

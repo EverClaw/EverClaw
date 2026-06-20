@@ -1,0 +1,9 @@
+{
+  "name": "Bitcoin Claw",
+  "slug": "bitcoinclaw",
+  "domain": "bitcoinclaw.ai",
+  "description": "AI agent for Bitcoin ecosystem",
+  "remote": "https://github.com/profbernardoj/bitcoinclaw.ai.git",
+  "defaultModel": "glm-5",
+  "persona": "Bitcoin-focused AI assistant"
+}

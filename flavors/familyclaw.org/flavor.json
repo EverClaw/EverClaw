@@ -1,0 +1,9 @@
+{
+  "name": "Family Claw",
+  "slug": "familyclaw",
+  "domain": "familyclaw.org",
+  "description": "AI agent for family coordination",
+  "remote": "https://github.com/profbernardoj/familyclaw.org.git",
+  "defaultModel": "glm-5",
+  "persona": "Family-focused AI assistant"
+}

@@ -1,0 +1,9 @@
+{
+  "name": "Apple Claw",
+  "slug": "appleclaw",
+  "domain": "appleclaw.org",
+  "description": "AI agent for the Apple ecosystem",
+  "remote": "https://github.com/profbernardoj/appleclaw.org.git",
+  "defaultModel": "glm-5",
+  "persona": "Apple ecosystem AI assistant"
+}

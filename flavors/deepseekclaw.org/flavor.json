@@ -1,0 +1,9 @@
+{
+  "name": "DeepSeek Claw",
+  "slug": "deepseekclaw",
+  "domain": "deepseekclaw.org",
+  "description": "AI agent powered by DeepSeek models",
+  "remote": "https://github.com/profbernardoj/deepseekclaw.org.git",
+  "defaultModel": "glm-5",
+  "persona": "DeepSeek-focused AI assistant"
+}
