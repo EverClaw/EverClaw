@@ -21,13 +21,13 @@
         "api": "openai-completions",
         "models": [
           {
-            "id": "glm-5.1",
-            "name": "GLM-5.1 (Morpheus Gateway)",
+            "id": "glm-5.1-non-thinking",
+            "name": "GLM-5.1 Non-Thinking (Morpheus Gateway)",
             "reasoning": false
           },
           {
-            "id": "glm-5",
-            "name": "GLM-5 (Morpheus Gateway)",
+            "id": "glm-5-non-thinking",
+            "name": "GLM-5 Non-Thinking (Morpheus Gateway)",
             "reasoning": false
           },
           {
@@ -52,13 +52,13 @@
         "api": "openai-completions",
         "models": [
           {
-            "id": "glm-5.1",
-            "name": "GLM-5.1 (Morpheus Local)",
+            "id": "glm-5.1-non-thinking",
+            "name": "GLM-5.1 Non-Thinking (Morpheus Local)",
             "reasoning": false
           },
           {
-            "id": "glm-5",
-            "name": "GLM-5 (Morpheus Local)",
+            "id": "glm-5-non-thinking",
+            "name": "GLM-5 Non-Thinking (Morpheus Local)",
             "reasoning": false
           },
           {
@@ -84,18 +84,18 @@
     "defaults": {
       "timeoutSeconds": 300,
       "model": {
-        "primary": "mor-gateway/glm-5.1",
+        "primary": "mor-gateway/glm-5.1-non-thinking",
         "fallbacks": [
-          "mor-gateway/glm-5",
+          "mor-gateway/glm-5-non-thinking",
           "mor-gateway/kimi-k2.5",
           "mor-gateway/glm-4.7-flash"
         ]
       },
       "models": {
-        "mor-gateway/glm-5.1": {
+        "mor-gateway/glm-5.1-non-thinking": {
           "streaming": true
         },
-        "mor-gateway/glm-5": {
+        "mor-gateway/glm-5-non-thinking": {
           "streaming": true
         },
         "mor-gateway/deepseek-v4-flash": {
@@ -107,10 +107,10 @@
         "mor-gateway/glm-4.7-flash": {
           "streaming": true
         },
-        "morpheus-local/glm-5.1": {
+        "morpheus-local/glm-5.1-non-thinking": {
           "streaming": true
         },
-        "morpheus-local/glm-5": {
+        "morpheus-local/glm-5-non-thinking": {
           "streaming": true
         },
         "morpheus-local/kimi-k2.5": {
