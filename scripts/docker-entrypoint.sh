@@ -695,15 +695,65 @@ if [ "$CIG_ENABLED" = "true" ]; then
   if [ -n "${CONTAINER_FQDN:-}" ]; then
     echo "🏷️  CIG FQDN pre-set via env: ${CONTAINER_FQDN}"
   else
-    # FQDN not provided via env — the auth-proxy can only auto-detect the FQDN
-    # from an HTTP request's Host header. We don't know the FQDN yet, so we
-    # can't trigger auto-detection ourselves. Instead, we proceed to start the
-    # gateway. The auth-proxy will return 503 Retry-After on the first inference
-    # call until the user opens the container URL in a browser (which sends the
-    # Host header and triggers auto-detection). OpenClaw's fallback chain will
-    # retry the 503 and succeed once the FQDN is detected.
-    echo "⚠️  CIG FQDN not pre-set — auto-detection will occur on first browser request"
-    echo "   First inference may return 503 (retryable) until user opens the container URL"
+    # FQDN not provided via env — try to detect from container hostname.
+    # Docker sets $HOSTNAME to the container's hostname, which Fred sets to
+    # the full FQDN (e.g. openclaw-abc123.barney0.manifest0.net) for Manifest
+    # containers. If $HOSTNAME contains a dot and matches the allowed suffix,
+    # we trigger FQDN auto-detection by curling the auth-proxy with that Host
+    # header. This ensures the FQDN is locked BEFORE OpenClaw starts its
+    # bootstrap inference call, preventing "assistant turn failed" errors.
+    DETECTED_FQDN=""
+
+    # Strategy 1: Check $HOSTNAME (Docker container hostname)
+    if [ -n "${HOSTNAME:-}" ] && echo "${HOSTNAME}" | grep -q '\.'; then
+      DETECTED_FQDN="${HOSTNAME}"
+    fi
+
+    # Strategy 2: Try hostname -f (FQDN from /etc/hosts or DNS)
+    if [ -z "${DETECTED_FQDN}" ]; then
+      HOST_FQDN=$(hostname -f 2>/dev/null || echo '')
+      if [ -n "${HOST_FQDN}" ] && echo "${HOST_FQDN}" | grep -q '\.'; then
+        DETECTED_FQDN="${HOST_FQDN}"
+      fi
+    fi
+
+    # Strategy 3: Check /etc/hostname
+    if [ -z "${DETECTED_FQDN}" ]; then
+      ETC_HOSTNAME=$(cat /etc/hostname 2>/dev/null || echo '')
+      if [ -n "${ETC_HOSTNAME}" ] && echo "${ETC_HOSTNAME}" | grep -q '\.'; then
+        DETECTED_FQDN="${ETC_HOSTNAME}"
+      fi
+    fi
+
+    if [ -n "${DETECTED_FQDN}" ]; then
+      echo "🔍 Detected container FQDN from hostname: ${DETECTED_FQDN}"
+      # Trigger FQDN auto-detection in auth-proxy by making a local request
+      # with the correct Host header. This locks the FQDN before OpenClaw starts.
+      FQDN_WAIT=0
+      FQDN_MAX_WAIT=15
+      while [ $FQDN_WAIT -lt $FQDN_MAX_WAIT ]; do
+        HEALTH_RESP=$(curl -sf -H "Host: ${DETECTED_FQDN}" http://127.0.0.1:18789/health 2>/dev/null || echo '')
+        if [ -n "$HEALTH_RESP" ]; then
+          FQDN_DETECTED=$(echo "$HEALTH_RESP" | jq -r '.cig.detected // false' 2>/dev/null)
+          FQDN_VALUE=$(echo "$HEALTH_RESP" | jq -r '.cig.fqdn // empty' 2>/dev/null)
+          if [ "$FQDN_DETECTED" = "true" ] && [ -n "$FQDN_VALUE" ]; then
+            echo "✅ CIG FQDN locked via hostname detection: ${FQDN_VALUE}"
+            break
+          fi
+        fi
+        FQDN_WAIT=$((FQDN_WAIT + 1))
+        sleep 1
+      done
+
+      if [ $FQDN_WAIT -ge $FQDN_MAX_WAIT ]; then
+        echo "⚠️  CIG FQDN detection from hostname timed out after ${FQDN_MAX_WAIT}s"
+        echo "   Will rely on first browser request for auto-detection"
+      fi
+    else
+      # Could not detect FQDN from hostname — proceed with auto-detection on first browser request
+      echo "⚠️  CIG FQDN not pre-set — auto-detection will occur on first browser request"
+      echo "   First inference may return 503 (retryable) until user opens the container URL"
+    fi
   fi
 fi
 
