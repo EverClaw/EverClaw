@@ -10,6 +10,11 @@ All notable changes to EverClaw are documented here.
 - **supabase/functions/cig-inference/index.ts:** Added `glm-5.2` (and all prefixed variants) to `RESERVE_ESTIMATES_USD` with $0.005 per-request reserve estimate (same tier as GLM-5.1).
 - **supabase/migrations/20260623_add_glm52_free_tier.sql:** Updated `check_and_charge_usage()` free tier allowlist to include `glm-5.2` and all prefix variants (`morpheus/glm-5.2`, `mor-gateway/glm-5.2`, `morpheus-local/glm-5.2`). Added `insert_usage_log()` RPC function for idempotent usage log writes. Added `model_prices` entries for all four name variants.
 
+### Fixed — "assistant turn failed" Regression
+
+- **supabase/migrations/20260623_add_glm52_free_tier.sql:** Fixed critical parameter name typo in `check_and_charge_usage()` — `v_cost_usd` was used in 5 places instead of `p_cost_usd`, causing SQL error `column "v_cost_usd" does not exist` on ALL inference calls. The function body has been restored to the proven June 22 version with only the GLM-5.2 allowlist addition.
+- **supabase/functions/cig-inference/index.ts:** Added `daily_limit_exceeded` to the error reason mapping (maps to 429 `daily_limit_or_credits_exhausted`). Previously only `insufficient_credits` was mapped, causing `daily_limit_exceeded` to fall through as a raw 403.
+
 ## [2026.6.18.2357] - 2026-06-18
 
 ### Bug Fixes — Revert OpenClaw Pin + CIG Model Prefix
