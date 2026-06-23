@@ -21,6 +21,11 @@
         "api": "openai-completions",
         "models": [
           {
+            "id": "glm-5.2",
+            "name": "GLM-5.2 (Morpheus Gateway)",
+            "reasoning": false
+          },
+          {
             "id": "glm-5.1-non-thinking",
             "name": "GLM-5.1 Non-Thinking (Morpheus Gateway)",
             "reasoning": false
@@ -51,6 +56,11 @@
         "baseUrl": "http://127.0.0.1:8083/v1",
         "api": "openai-completions",
         "models": [
+          {
+            "id": "glm-5.2",
+            "name": "GLM-5.2 (Morpheus Local)",
+            "reasoning": false
+          },
           {
             "id": "glm-5.1-non-thinking",
             "name": "GLM-5.1 Non-Thinking (Morpheus Local)",
@@ -92,6 +102,9 @@
         ]
       },
       "models": {
+        "mor-gateway/glm-5.2": {
+          "streaming": true
+        },
         "mor-gateway/glm-5.1-non-thinking": {
           "streaming": true
         },
@@ -105,6 +118,9 @@
           "streaming": true
         },
         "mor-gateway/glm-4.7-flash": {
+          "streaming": true
+        },
+        "morpheus-local/glm-5.2": {
           "streaming": true
         },
         "morpheus-local/glm-5.1-non-thinking": {

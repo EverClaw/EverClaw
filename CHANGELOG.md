@@ -2,6 +2,14 @@
 
 All notable changes to EverClaw are documented here.
 
+## [2026.6.23.1642] - 2026-06-23
+
+### Added — GLM-5.2 for Free Tier
+
+- **config/openclaw-default.json:** Added `glm-5.2` model to both `mor-gateway` and `morpheus-local` providers with `reasoning: false` and `streaming: true`. Free tier users can now select GLM-5.2 as an alternative to DeepSeek V4 Flash. Default model remains `deepseek-v4-flash` (set by `provision-buffer` `EVERCLAW_DEFAULT_MODEL` env var).
+- **supabase/functions/cig-inference/index.ts:** Added `glm-5.2` (and all prefixed variants) to `RESERVE_ESTIMATES_USD` with $0.005 per-request reserve estimate (same tier as GLM-5.1).
+- **supabase/migrations/20260623_add_glm52_free_tier.sql:** Updated `check_and_charge_usage()` free tier allowlist to include `glm-5.2` and all prefix variants (`morpheus/glm-5.2`, `mor-gateway/glm-5.2`, `morpheus-local/glm-5.2`). Added `insert_usage_log()` RPC function for idempotent usage log writes. Added `model_prices` entries for all four name variants.
+
 ## [2026.6.18.2357] - 2026-06-18
 
 ### Bug Fixes — Revert OpenClaw Pin + CIG Model Prefix
