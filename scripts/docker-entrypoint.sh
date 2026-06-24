@@ -725,6 +725,20 @@ if [ "$CIG_ENABLED" = "true" ]; then
       fi
     fi
 
+    # Strategy 4: Extract from AGENT_URL env var (set by Manifest/Fred for some deployments)
+    # Format: https://openclaw-abc123.barney0.manifest0.net
+    if [ -z "${DETECTED_FQDN}" ] && [ -n "${AGENT_URL:-}" ]; then
+      URL_HOST=$(echo "${AGENT_URL}" | sed -E 's|^[a-z]+://||' | sed 's|/.*||' | sed 's|:.*||')
+      if [ -n "${URL_HOST}" ] && echo "${URL_HOST}" | grep -q '\.'; then
+        DETECTED_FQDN="${URL_HOST}"
+      fi
+    fi
+
+    # Strategy 5: Extract from CIG_CONTAINER_FQDN env var (may differ from CONTAINER_FQDN)
+    if [ -z "${DETECTED_FQDN}" ] && [ -n "${CIG_CONTAINER_FQDN:-}" ]; then
+      DETECTED_FQDN="${CIG_CONTAINER_FQDN}"
+    fi
+
     if [ -n "${DETECTED_FQDN}" ]; then
       echo "🔍 Detected container FQDN from hostname: ${DETECTED_FQDN}"
       # Trigger FQDN auto-detection in auth-proxy by making a local request
@@ -750,9 +764,11 @@ if [ "$CIG_ENABLED" = "true" ]; then
         echo "   Will rely on first browser request for auto-detection"
       fi
     else
-      # Could not detect FQDN from hostname — proceed with auto-detection on first browser request
+      # Could not detect FQDN from hostname — proceed with auto-detection on first browser request.
+      # The auth-proxy will internally retry for up to 15 seconds (CIG_FQDN_WAIT_MS) before
+      # returning 503, giving time for a concurrent browser request to trigger detection.
       echo "⚠️  CIG FQDN not pre-set — auto-detection will occur on first browser request"
-      echo "   First inference may return 503 (retryable) until user opens the container URL"
+      echo "   Auth-proxy will retry inference for up to 15s while waiting for FQDN detection"
     fi
   fi
 fi
