@@ -894,74 +894,37 @@ else
 fi
 
 # ─── Bootstrap Session Reset ─────────────────────────────────────────────────
-# OpenClaw's first bootstrap turn often fails with "assistant turn failed before
-# producing content" due to a cold-start race condition (SOP-021). This leaves
-# the main session with a broken message visible in the Control UI.
+# OpenClaw's first bootstrap turn often fails with "assistant turn failed
+# before producing content" due to a cold-start race condition (SOP-021).
+# This leaves the main session with a broken message visible in the Control UI.
 #
-# Workaround: after the gateway stabilizes, wait for the initial bootstrap turn
-# to complete (or fail), then check if the main session actually has the error.
-# Only reset if the failed turn is detected — this preserves successful
-# bootstraps and any user interaction that may have started in the window.
-#
-# This runs as a background process so the entrypoint doesn't block on it.
-# sessions.reset with reason:"new" clears the bootstrap snapshot, so the reset
-# itself does NOT re-trigger a bootstrap agent turn (confirmed in source).
+# Simple fix: after the gateway stabilizes, wait briefly for the bootstrap
+# turn to complete, then unconditionally reset the main session.
+# Buffer pool containers sit warm for minutes before being claimed, so
+# there is no user content to destroy.
 
 if [ "${GATEWAY_HEALTHY:-}" = "true" ]; then
   (
-    BOOTSTRAP_RESET_DELAY=20
-    BOOTSTRAP_RESET_TIMEOUT=10000
+    # Wait for the initial bootstrap turn to complete or fail.
+    # The turn typically fails within 5-15s; 20s gives a safety margin
+    # so the reset fires after the failure is written, not during it.
+    sleep 20
 
-    # Wait for the initial bootstrap turn to complete/fail.
-    # OpenClaw starts an agent turn immediately after the gateway is healthy.
-    # That turn typically fails within 5-15s due to CIG/FQDN race conditions.
-    # We wait BOOTSTRAP_RESET_DELAY seconds to be safe, then check state.
-    sleep "$BOOTSTRAP_RESET_DELAY"
-
-    # Connect to the internal gateway port.
-    # In auth-proxy mode: gateway runs on 18790 (loopback, trusted-proxy)
-    # In legacy mode: gateway runs on 18789 (token auth)
     RESET_PORT="${GATEWAY_PORT:-18789}"
     RESET_URL="ws://127.0.0.1:${RESET_PORT}"
 
-    # Build the query command (sessions.get) to check if the main session
-    # actually has a failed bootstrap turn before resetting.
-    # Using a bash array for safe quoting/word-splitting (NOT for /proc
-    # protection — argv is still visible in /proc in shared PID namespaces).
-    # In trusted-proxy mode (Privy), loopback connections are allowed
-    # without a token via gateway.auth.trustedProxy.allowLoopback=true.
-    QUERY_CMD=(node /app/openclaw.mjs gateway call sessions.get
+    RESET_CMD=(node /app/openclaw.mjs gateway call sessions.reset
       --url "${RESET_URL}"
-      --params '{"key":"main","limit":5}'
-      --timeout "${BOOTSTRAP_RESET_TIMEOUT}")
+      --params '{"key":"main","reason":"new"}'
+      --timeout 10000)
     if [ -n "${AUTH_TOKEN:-}" ]; then
-      QUERY_CMD+=(--token "${AUTH_TOKEN}")
+      RESET_CMD+=(--token "${AUTH_TOKEN}")
     fi
 
-    # Check if the main session has the bootstrap failure message.
-    # If the bootstrap succeeded or the user already started chatting,
-    # skip the reset to avoid destroying useful content.
-    if ! SESSION_STATE=$("${QUERY_CMD[@]}" 2>/dev/null); then
-      echo "⚠️  Bootstrap session check failed (could not query state — skipping reset)"
-    elif echo "$SESSION_STATE" | grep -q 'assistant turn failed before producing content'; then
-      # Reset the main session — this clears the failed bootstrap messages
-      # and gives the user a fresh session when they open the Control UI.
-      # The "reason: new" matches the behavior of the /new slash command.
-      RESET_CMD=(node /app/openclaw.mjs gateway call sessions.reset
-        --url "${RESET_URL}"
-        --params '{"key":"main","reason":"new"}'
-        --timeout "${BOOTSTRAP_RESET_TIMEOUT}")
-      if [ -n "${AUTH_TOKEN:-}" ]; then
-        RESET_CMD+=(--token "${AUTH_TOKEN}")
-      fi
-
-      if "${RESET_CMD[@]}" >/dev/null 2>&1; then
-        echo "🔄 Bootstrap session reset — fresh session ready for user"
-      else
-        echo "⚠️  Bootstrap session reset failed (non-critical — user can type /new)"
-      fi
+    if "${RESET_CMD[@]}" >/dev/null 2>&1; then
+      echo "🔄 Bootstrap session reset — fresh session ready for user"
     else
-      echo "✅ Bootstrap session healthy — no reset needed"
+      echo "⚠️  Bootstrap session reset failed (non-critical — user can type /new)"
     fi
   ) &
 fi

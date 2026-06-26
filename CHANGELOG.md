@@ -2,6 +2,12 @@
 
 All notable changes to EverClaw are documented here.
 
+## [2026.6.26.2008] - 2026-06-26
+
+### Fixed — Simplified Bootstrap Session Reset
+
+- **scripts/docker-entrypoint.sh:** Simplified the Bootstrap Session Reset from 73 lines of conditional query+grep+reset logic to a straightforward unconditional reset. The previous approach silently failed when the `sessions.get` query didn't find the error string (e.g., auth issues, wrong port, timeout), leaving the broken session visible to users. The new approach: wait 20s after gateway health, then unconditionally call `sessions.reset` with `reason:"new"`. Buffer pool containers sit warm for minutes before being claimed, so there is no user content to destroy. Removed the `sessions.get` query, grep conditional, named constants, and if/elif/else branching.
+
 ## [2026.6.26.0606] - 2026-06-26
 
 ### Fixed — Bootstrap Session Reset for InstallOpenClaw.xyz Cold Start
