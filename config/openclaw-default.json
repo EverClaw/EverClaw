@@ -31,8 +31,8 @@
             "reasoning": false
           },
           {
-            "id": "glm-5-non-thinking",
-            "name": "GLM-5 Non-Thinking (Morpheus Gateway)",
+            "id": "glm-5",
+            "name": "GLM-5 (Morpheus Gateway)",
             "reasoning": false
           },
           {
@@ -67,8 +67,8 @@
             "reasoning": false
           },
           {
-            "id": "glm-5-non-thinking",
-            "name": "GLM-5 Non-Thinking (Morpheus Local)",
+            "id": "glm-5",
+            "name": "GLM-5 (Morpheus Local)",
             "reasoning": false
           },
           {
@@ -96,7 +96,7 @@
       "model": {
         "primary": "mor-gateway/glm-5.1-non-thinking",
         "fallbacks": [
-          "mor-gateway/glm-5-non-thinking",
+          "mor-gateway/glm-5",
           "mor-gateway/kimi-k2.5",
           "mor-gateway/glm-4.7-flash"
         ]
@@ -108,7 +108,7 @@
         "mor-gateway/glm-5.1-non-thinking": {
           "streaming": true
         },
-        "mor-gateway/glm-5-non-thinking": {
+        "mor-gateway/glm-5": {
           "streaming": true
         },
         "mor-gateway/deepseek-v4-flash": {
@@ -126,7 +126,7 @@
         "morpheus-local/glm-5.1-non-thinking": {
           "streaming": true
         },
-        "morpheus-local/glm-5-non-thinking": {
+        "morpheus-local/glm-5": {
           "streaming": true
         },
         "morpheus-local/kimi-k2.5": {
