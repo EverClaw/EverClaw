@@ -2,6 +2,12 @@
 
 All notable changes to EverClaw are documented here.
 
+## [2026.6.26.2131] - 2026-06-26
+
+### Fixed — Reset Dashboard Session (not main)
+
+- **scripts/docker-entrypoint.sh:** Fixed the bootstrap session reset to target the correct session key. The Control UI uses `agent:main:dashboard:<uuid>` session keys, not `agent:main:main`. The previous fix reset `main` which had no effect on the UI. Now the script lists all sessions, finds dashboard session keys, and resets each one.
+
 ## [2026.6.26.2008] - 2026-06-26
 
 ### Fixed — Simplified Bootstrap Session Reset

@@ -896,12 +896,13 @@ fi
 # ─── Bootstrap Session Reset ─────────────────────────────────────────────────
 # OpenClaw's first bootstrap turn often fails with "assistant turn failed
 # before producing content" due to a cold-start race condition (SOP-021).
-# This leaves the main session with a broken message visible in the Control UI.
+# This leaves the dashboard session with a broken message visible in the Control UI.
 #
-# Simple fix: after the gateway stabilizes, wait briefly for the bootstrap
-# turn to complete, then unconditionally reset the main session.
-# Buffer pool containers sit warm for minutes before being claimed, so
-# there is no user content to destroy.
+# Fix: after the gateway stabilizes, wait briefly for the bootstrap turn to
+# complete, then find and reset ALL dashboard sessions. The Control UI uses
+# agent:main:dashboard:<uuid> session keys — resetting "main" doesn't help.
+# Buffer pool containers sit warm for minutes before being claimed, so there
+# is no user content to destroy.
 
 if [ "${GATEWAY_HEALTHY:-}" = "true" ]; then
   (
@@ -913,18 +914,35 @@ if [ "${GATEWAY_HEALTHY:-}" = "true" ]; then
     RESET_PORT="${GATEWAY_PORT:-18789}"
     RESET_URL="ws://127.0.0.1:${RESET_PORT}"
 
-    RESET_CMD=(node /app/openclaw.mjs gateway call sessions.reset
+    # Find all dashboard session keys (agent:main:dashboard:<uuid>)
+    LIST_CMD=(node /app/openclaw.mjs gateway call sessions.list
       --url "${RESET_URL}"
-      --params '{"key":"main","reason":"new"}'
+      --params '{"limit":100}'
       --timeout 10000)
     if [ -n "${AUTH_TOKEN:-}" ]; then
-      RESET_CMD+=(--token "${AUTH_TOKEN}")
+      LIST_CMD+=(--token "${AUTH_TOKEN}")
     fi
 
-    if "${RESET_CMD[@]}" >/dev/null 2>&1; then
-      echo "🔄 Bootstrap session reset — fresh session ready for user"
+    DASH_KEYS=$("${LIST_CMD[@]}" 2>/dev/null | grep -o 'agent:main:dashboard:[a-f0-9-]*' | sort -u)
+
+    if [ -z "${DASH_KEYS:-}" ]; then
+      echo "⚠️  No dashboard sessions found — skipping reset"
     else
-      echo "⚠️  Bootstrap session reset failed (non-critical — user can type /new)"
+      for DASH_KEY in $DASH_KEYS; do
+        RESET_CMD=(node /app/openclaw.mjs gateway call sessions.reset
+          --url "${RESET_URL}"
+          --params "{\"key\":\"${DASH_KEY}\",\"reason\":\"new\"}"
+          --timeout 10000)
+        if [ -n "${AUTH_TOKEN:-}" ]; then
+          RESET_CMD+=(--token "${AUTH_TOKEN}")
+        fi
+        if "${RESET_CMD[@]}" >/dev/null 2>&1; then
+          echo "🔄 Reset dashboard session: ${DASH_KEY}"
+        else
+          echo "⚠️  Reset failed for: ${DASH_KEY}"
+        fi
+      done
+      echo "🔄 Bootstrap session reset — fresh dashboard ready for user"
     fi
   ) &
 fi
