@@ -2,6 +2,12 @@
 
 All notable changes to EverClaw are documented here.
 
+## [2026.6.26.0606] - 2026-06-26
+
+### Fixed — Bootstrap Session Reset for InstallOpenClaw.xyz Cold Start
+
+- **scripts/docker-entrypoint.sh:** Added Bootstrap Session Reset block. After the gateway becomes healthy, a background process waits 20s for the initial bootstrap agent turn to complete, queries `sessions.get` to check if the main session has the "assistant turn failed before producing content" error, and if detected, calls `sessions.reset` with `reason:"new"` to clear the failed session. This gives users a fresh, clean session when they first open the Control UI instead of seeing a broken error message. The reset is conditional — if the bootstrap succeeded or the user already started chatting, the reset is skipped. Handles both legacy token auth (port 18789) and Privy trusted-proxy mode (port 18790).
+
 ## [2026.6.23.1642] - 2026-06-23
 
 ### Added — GLM-5.2 for Free Tier
