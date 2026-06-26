@@ -13,7 +13,7 @@
 
 services:
   everclaw:
-    image: ghcr.io/everclaw/everclaw:2026.6.26.0606
+    image: ghcr.io/everclaw/everclaw:2026.6.26.2339
     build:
       context: .
       dockerfile: Dockerfile
