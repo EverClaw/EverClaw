@@ -21,13 +21,8 @@
         "api": "openai-completions",
         "models": [
           {
-            "id": "glm-5.2",
-            "name": "GLM-5.2 (Morpheus Gateway)",
-            "reasoning": false
-          },
-          {
-            "id": "glm-5.1-non-thinking",
-            "name": "GLM-5.1 Non-Thinking (Morpheus Gateway)",
+            "id": "glm-5.1",
+            "name": "GLM-5.1 (Morpheus Gateway)",
             "reasoning": false
           },
           {
@@ -57,13 +52,8 @@
         "api": "openai-completions",
         "models": [
           {
-            "id": "glm-5.2",
-            "name": "GLM-5.2 (Morpheus Local)",
-            "reasoning": false
-          },
-          {
-            "id": "glm-5.1-non-thinking",
-            "name": "GLM-5.1 Non-Thinking (Morpheus Local)",
+            "id": "glm-5.1",
+            "name": "GLM-5.1 (Morpheus Local)",
             "reasoning": false
           },
           {
@@ -94,7 +84,7 @@
     "defaults": {
       "timeoutSeconds": 300,
       "model": {
-        "primary": "mor-gateway/glm-5.1-non-thinking",
+        "primary": "mor-gateway/glm-5.1",
         "fallbacks": [
           "mor-gateway/glm-5",
           "mor-gateway/kimi-k2.5",
@@ -102,10 +92,7 @@
         ]
       },
       "models": {
-        "mor-gateway/glm-5.2": {
-          "streaming": true
-        },
-        "mor-gateway/glm-5.1-non-thinking": {
+        "mor-gateway/glm-5.1": {
           "streaming": true
         },
         "mor-gateway/glm-5": {
@@ -120,10 +107,7 @@
         "mor-gateway/glm-4.7-flash": {
           "streaming": true
         },
-        "morpheus-local/glm-5.2": {
-          "streaming": true
-        },
-        "morpheus-local/glm-5.1-non-thinking": {
+        "morpheus-local/glm-5.1": {
           "streaming": true
         },
         "morpheus-local/glm-5": {
