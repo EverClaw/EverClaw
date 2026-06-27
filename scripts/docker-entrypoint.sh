@@ -832,14 +832,18 @@ fi
 # fires during container warm-up (before the user claims the container) and
 # can leave "assistant turn failed" errors in dashboard sessions. We reset
 # those sessions so the user sees a clean onboarding experience.
+#
 # This runs 20s after gateway health to allow the bootstrap turn to complete,
 # and only resets dashboard sessions (not main — user content is preserved).
+# On container restart (e.g. Manifest node migration), this clears stale UI
+# state, which is desirable — the user's main session content is untouched.
+# This only runs at container startup (entrypoint is one-shot, not a loop).
 if [ "$GATEWAY_HEALTHY" = "true" ] && [ "$AUTH_PROXY_ENABLED" = "true" ]; then
   (sleep 20 && \
-    openclaw gateway call sessions.list --params '{"prefix":"agent:main:dashboard:"}' 2>/dev/null | \
+    node /app/openclaw.mjs gateway call sessions.list --params '{"prefix":"agent:main:dashboard:"}' 2>/dev/null | \
     jq -r '.sessions[]?.key // empty' 2>/dev/null | \
     while IFS= read -r sk; do
-      [ -n "$sk" ] && openclaw gateway call sessions.reset --params "{\"key\":\"$sk\",\"reason\":\"new\"}" 2>/dev/null && \
+      [ -n "$sk" ] && node /app/openclaw.mjs gateway call sessions.reset --params "{\"key\":\"$sk\",\"reason\":\"new\"}" 2>/dev/null && \
         echo "🔄 Reset dashboard session: $sk"
     done) &
 fi
