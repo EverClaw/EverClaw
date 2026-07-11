@@ -12,8 +12,8 @@
 # Override by mounting your own config at ~/.openclaw/openclaw.json
 
 services:
-  everclaw:
-    image: ghcr.io/everclaw/everclaw:2026.6.26.2550
+  everclaw:2026.7.11.0248
+    image: ghcr.io/everclaw/everclaw:2026.7.11.0248
     build:
       context: .
       dockerfile: Dockerfile

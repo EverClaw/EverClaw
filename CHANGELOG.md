@@ -2,6 +2,17 @@
 
 All notable changes to EverClaw are documented here.
 
+## [2026.7.11.0248] - 2026-07-11
+
+### Changed — GLM-5.2 Default + Bootstrap Reset Hardening
+
+- **scripts/docker-entrypoint.sh:** Updated fallback default model from `glm-5.1` to `glm-5.2`. This aligns the Docker image default with the Free tier configuration in `provision-buffer` (`EVERCLAW_DEFAULT_MODEL=glm-5.2`). The env var override still takes precedence; this only affects containers without the env var set.
+- **scripts/docker-entrypoint.sh:** Hardened bootstrap session reset from a one-shot `sleep 20` to a polling loop (3 iterations × 20s = 60s). Fixes race condition where Morpheus P2P inference failures that arrive after the 20s window left "assistant turn failed" errors visible to users.
+  - Added `OPENCLAW_OWNER_PRIVY_ID` guard: only runs on unclaimed buffer containers (`buffer-unassigned`), preventing accidental session wipes during Manifest node migrations on claimed containers.
+  - Added `command -v` guards for `jq` and `node` with diagnostic output instead of silent failure.
+  - Fixed JSON injection risk: session keys now passed via `jq -nc --arg` instead of string interpolation.
+  - Added `|| true` pipeline guard for `set -e` compatibility.
+
 ## [2026.6.26.2131] - 2026-06-26
 
 ### Fixed — Reset Dashboard Session (not main)

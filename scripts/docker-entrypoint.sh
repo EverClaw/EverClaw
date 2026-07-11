@@ -58,7 +58,7 @@ TPL_USER_NAME="${EVERCLAW_USER_NAME:-User}"
 TPL_USER_DISPLAY_NAME="${EVERCLAW_USER_DISPLAY_NAME:-$TPL_USER_NAME}"
 TPL_USER_TIMEZONE="${TZ:-UTC}"
 TPL_PROXY_PORT="${EVERCLAW_PROXY_PORT:-8083}"
-TPL_DEFAULT_MODEL="${EVERCLAW_DEFAULT_MODEL:-glm-5.1}"
+TPL_DEFAULT_MODEL="${EVERCLAW_DEFAULT_MODEL:-glm-5.2}"
 
 # Copy boot file templates if workspace is empty, substituting placeholders
 for template in AGENTS SOUL USER IDENTITY HEARTBEAT TOOLS; do
@@ -827,25 +827,52 @@ else
   echo ""
 fi
 
-# ─── Bootstrap Session Reset ─────────────────────────────────────────────────
+# ─── Bootstrap Session Reset (Polling) ───────────────────────────────────────
 # Clear any failed assistant turns from the bootstrap prompt. The bootstrap
 # fires during container warm-up (before the user claims the container) and
 # can leave "assistant turn failed" errors in dashboard sessions. We reset
 # those sessions so the user sees a clean onboarding experience.
 #
-# This runs 20s after gateway health to allow the bootstrap turn to complete,
-# and only resets dashboard sessions (not main — user content is preserved).
-# On container restart (e.g. Manifest node migration), this clears stale UI
-# state, which is desirable — the user's main session content is untouched.
-# This only runs at container startup (entrypoint is one-shot, not a loop).
-if [ "$GATEWAY_HEALTHY" = "true" ] && [ "$AUTH_PROXY_ENABLED" = "true" ]; then
-  (sleep 20 && \
-    node /app/openclaw.mjs gateway call sessions.list --params '{"prefix":"agent:main:dashboard:"}' 2>/dev/null | \
-    jq -r '.sessions[]?.key // empty' 2>/dev/null | \
-    while IFS= read -r sk; do
-      [ -n "$sk" ] && node /app/openclaw.mjs gateway call sessions.reset --params "{\"key\":\"$sk\",\"reason\":\"new\"}" 2>/dev/null && \
-        echo "🔄 Reset dashboard session: $sk"
-    done) &
+# The first inference can take up to 45s (Morpheus P2P headers timeout) plus
+# retries, so a one-shot sleep is fragile — if the failure lands AFTER the
+# reset, the error stays visible.
+#
+# Instead, we poll: reset dashboard sessions every 20s for the first 60 seconds
+# after gateway health. This covers:
+#   - Bootstrap turn firing (~5s after health)
+#   - CIG FQDN detection (happens on first inference request)
+#   - Morpheus P2P node discovery + first response (up to 45s per attempt)
+# Each reset clears any error state that accumulated since the last reset.
+# The user's main session content is untouched (only dashboard sessions reset).
+# After 60s, the bootstrap+inference pipeline has either succeeded or the error
+# is persistent and no further resets would help.
+#
+# Guard: Only run on unclaimed buffer containers (OPENCLAW_OWNER_PRIVY_ID is
+# "buffer-unassigned" until the verify-owner flow assigns a real user). On
+# container restart after a user has claimed the container, the owner ID is a
+# real Privy ID, so we skip the reset loop entirely — avoids wiping an active
+# user's dashboard sessions during Manifest node migrations.
+if [ "$GATEWAY_HEALTHY" = "true" ] && [ "$AUTH_PROXY_ENABLED" = "true" ] && [ "${OPENCLAW_OWNER_PRIVY_ID:-}" = "buffer-unassigned" ]; then
+  (
+    command -v jq   >/dev/null || { echo "⚠️  jq missing, bootstrap reset disabled"; exit 0; }
+    command -v node >/dev/null || { echo "⚠️  node missing, bootstrap reset disabled"; exit 0; }
+    BOOTSTRAP_RESET_WINDOW=60    # Total polling window in seconds (3 iterations)
+    BOOTSTRAP_RESET_INTERVAL=20  # Reset every 20s
+    ELAPSED=0
+    while [ "$ELAPSED" -lt "$BOOTSTRAP_RESET_WINDOW" ]; do
+      sleep "$BOOTSTRAP_RESET_INTERVAL"
+      ELAPSED=$((ELAPSED + BOOTSTRAP_RESET_INTERVAL))
+      node /app/openclaw.mjs gateway call sessions.list --params '{"prefix":"agent:main:dashboard:"}' 2>/dev/null | \
+        jq -r '.sessions[]?.key // empty' | \
+        while IFS= read -r sk; do
+          if [ -n "$sk" ]; then
+            PARAMS=$(jq -nc --arg k "$sk" '{key:$k, reason:"new"}')
+            node /app/openclaw.mjs gateway call sessions.reset --params "$PARAMS" 2>/dev/null && \
+              echo "🔄 Reset dashboard session: $sk (${ELAPSED}s)"
+          fi
+        done || true
+    done
+  ) &
 fi
 
 # Block on gateway process (container lifecycle tied to gateway)
