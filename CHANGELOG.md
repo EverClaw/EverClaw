@@ -2,6 +2,27 @@
 
 All notable changes to EverClaw are documented here.
 
+## [Unreleased] - 2026-07-17
+
+### Added — Full Container Capability Upgrade
+
+- **Dockerfile:** Merged all packages from `Dockerfile.optimized` into the production Dockerfile. InstallOpenClaw.xyz containers now ship with a complete toolset:
+  - **python3 + pip** — Python execution for agents (allowlisted in security tier)
+  - **zip + unzip** — Archive operations (allowlisted in security tier)
+  - **ffmpeg** — Audio/video processing (voice notes, video frames skill)
+  - **gnupg** — GPG key management (required for Adoptium Java repo)
+  - **Java 21 (Temurin JRE)** — Runtime for signal-cli
+  - **signal-cli v0.14.5** — Signal messaging (SHA256 checksum verified)
+  - **GitHub CLI (gh)** — Git platform operations (allowlisted in security tier)
+  - **Brave Browser** — Headless browser automation (OpenClaw browser tool)
+  - **openai-whisper** — Speech-to-text (CPU-only torch, model downloads on demand)
+- **scripts/docker-entrypoint.sh:** Default security tier changed from `recommended` to `low`. All 54 exec-allowlisted binaries (ls, cat, grep, node, python3, git, curl, etc.) now run without approval prompts. Money operations remain gated at the application layer (everclaw-wallet.mjs) regardless of tier.
+
+### Changed
+
+- **Dockerfile:** `EVERCLAW_SECURITY_TIER` default updated from `recommended` to `low` with warning comments.
+- **scripts/docker-entrypoint.sh:** `SECURITY_TIER` default updated from `recommended` to `low` with explanatory comments.
+
 ## [2026.7.11.0248] - 2026-07-11
 
 ### Changed — GLM-5.2 Default + Bootstrap Reset Hardening
