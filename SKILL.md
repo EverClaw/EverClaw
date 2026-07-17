@@ -1217,7 +1217,7 @@ The watchdog catches the first two patterns (the most common Venice billing erro
 
 ---
 
-## 14. Gateway Guardian v5 (v2026.2.21)
+## 14. Gateway Guardian v5 (v2026.7.17.1447)
 
 A self-healing, billing-aware watchdog that monitors the OpenClaw [REDACTED] and its ability to run inference. Runs every 2 minutes via launchd.
 
@@ -1639,7 +1639,7 @@ if (agent.x402Support && apiEndpoint) {
 
 ---
 
-## Quick Reference (v2026.3.31)
+## Quick Reference (v2026.7.17.1447)
 
 | Action | Command |
 |--------|---------|
@@ -2183,7 +2183,7 @@ sudo pmset -a displaysleep 0
 
 ---
 
-## 21. Three-Shift Task Planning (v2026.2.21)
+## 21. Three-Shift Task Planning (v2026.7.17.1447)
 
 A structured task planning system that proposes prioritized work plans at the start of each 8-hour shift. Nothing executes without user approval.
 
@@ -2227,7 +2227,7 @@ See `three-shifts/SKILL.md` for full documentation including approval workflows,
 
 ---
 
-## 22. Backup & Restore (v2026.3.31)
+## 22. Backup & Restore (v2026.7.17.1447)
 
 Everclaw includes a comprehensive backup and restore system for disaster recovery and migration. All backups are encrypted with AGE encryption, portable across machines, and support both host and Docker environments.
 
@@ -2637,7 +2637,7 @@ When the restored agent boots and detects a migration note in today's daily memo
 
 ---
 
-## 23. Enhanced Memory with MemPalace (v2026.4.8)
+## 23. Enhanced Memory with MemPalace (v2026.7.17.1447)
 
 Optional upgrade to EverClaw's memory backend using [MemPalace](https://github.com/AiEnigma-Labs/MemPalace) — a local-first memory system with ChromaDB vector search, temporal knowledge graph, and hierarchical organization (wings/rooms/drawers).
 
@@ -2750,7 +2750,7 @@ MemPalace stores data locally in `~/.mempalace/`. Exported vaults may contain PI
 
 ---
 
-## 24. Buddy Bots — Multi-Agent Family Network (v2026.4.19)
+## 24. Buddy Bots — Multi-Agent Family Network (v2026.7.17.1447)
 
 Deploy a network of AI agents that coordinate on behalf of their humans over secure XMTP V6 messaging. Each family member, friend, or colleague gets their own buddy bot that can schedule, recommend, plan, and remind — without exposing raw personal data.
 
@@ -2850,24 +2850,24 @@ node scripts/buddy-export.mjs --import ~/alice-backup.tar.gz --force
 ## Changelog
 
 ### 2026.5.15.1418
-- **OpenClaw pin** v2026.5.7 → v2026.5.12
-- **Upstream highlights (v2026.5.7 → v2026.5.12):**
+- **OpenClaw pin** v2026.7.17.1447 → v2026.5.12
+- **Upstream highlights (v2026.7.17.1447 → v2026.5.12):**
   - New: Per-sender tool policies, per-agent message restrictions, cron.get, ACP session lineage, exec command highlighting, maxPingPongTurns to 20, Fal image edit routing, iMessage status filtering, Control UI recovery panel, Fly Machines detection
   - Build: pnpm 11.1.0, TypeScript 6.0.3, hard-pinned deps, OpenAI SDK 6.37.0, Anthropic SDK 0.95.1, Google GenAI 2.0.1, Peekaboo 3.0.0
   - Fixes: Gateway max_completion_tokens passthrough, compaction scope for background exec, doctor safe legacy migrations, Codex OAuth route preservation, cron model repair, Plugin SDK cleanup
-  - (Reference: https://github.com/openclaw/openclaw/releases/tag/v2026.5.12)
+  - (Reference: https://github.com/openclaw/openclaw/releases/tag/v2026.7.17.1447)
 
 ### 2026.5.11.1938
-- **OpenClaw pin** v2026.4.29 → v2026.5.7
-- **Upstream highlights (v2026.4.29 → v2026.5.7):**
+- **OpenClaw pin** v2026.7.17.1447 → v2026.5.7
+- **Upstream highlights (v2026.7.17.1447 → v2026.5.7):**
   - New: xAI/Grok 4.3, OpenAI Chat-Latest, Google Meet/Voice Call Twilio, local service startup, Plugin SDK session actions, Discord voice, Slack App Home, WhatsApp newsletter targets, /context map, git plugin installs
   - Build: pnpm 11, Plugin Registry npm-first cutover
   - Fixes: WhatsApp libsignal-node, Gateway secrets persistence, Feishu thread hydration, LINE dmPolicy
-  - (Reference: https://github.com/openclaw/openclaw/releases/tag/v2026.5.7)
+  - (Reference: https://github.com/openclaw/openclaw/releases/tag/v2026.7.17.1447)
 
 ### 2026.4.28.0352
-- **OpenClaw pin** v2026.4.25 → v2026.4.26
-- **Upstream highlights (v2026.4.26):**
+- **OpenClaw pin** v2026.7.17.1447 → v2026.4.26
+- **Upstream highlights (v2026.7.17.1447):**
   - Providers: Cerebras bundled plugin; Ollama mega-patch (~30 fixes: prefix stripping, native thinking effort, VRAM defaults, context windows, auth scoping, web search, vision modality, timeouts)
   - Memory: Asymmetric embedding inputType config; Ollama query prefixes for nomic/qwen3/mxbai models
   - Plugins: Config deprecation → snapshot-based mutation; layered OPENCLAW_PLUGIN_STAGE_DIR; symlink discovery; install/uninstall conflict-aware writes
@@ -2876,12 +2876,12 @@ node scripts/buddy-export.mjs --import ~/alice-backup.tar.gz --force
   - Agents: Transcript compaction preflight (maxActiveTranscriptBytes); sessions_spawn alias resolution fix; cron run-scoped context isolation
   - Matrix: E2EE one-command setup
   - Fixes: EPIPE crash guard, Bonjour restart hardening, device token echo fix, transcript redaction, link understanding fallback
-  - (Reference: https://github.com/openclaw/openclaw/releases/tag/v2026.4.26)
+  - (Reference: https://github.com/openclaw/openclaw/releases/tag/v2026.7.17.1447)
 
 ### 2026.4.28.0145
-- **OpenClaw pin** v2026.4.23 → v2026.4.25
-- **Bonjour/mDNS crash mitigation** — OpenClaw v2026.4.24 shipped a broken bonjour (mDNS/CIAO) plugin. EverClaw auto-disables it and cleans corrupted `plugin-runtime-deps` before gateway startup. (Ref: openclaw/openclaw#70232)
-- **Upstream highlights (v2026.4.24 + v2026.4.25):**
+- **OpenClaw pin** v2026.7.17.1447 → v2026.4.25
+- **Bonjour/mDNS crash mitigation** — OpenClaw v2026.7.17.1447 shipped a broken bonjour (mDNS/CIAO) plugin. EverClaw auto-disables it and cleans corrupted `plugin-runtime-deps` before gateway startup. (Ref: openclaw/openclaw#70232)
+- **Upstream highlights (v2026.7.17.1447 + v2026.4.25):**
   - TTS: `/tts latest` read-aloud, `/tts chat on|off` session-scoped auto-TTS, per-agent voice overrides, 6 new providers (Azure Speech, Xiaomi, Local CLI, Inworld, Volcengine, ElevenLabs v3)
   - Plugins: Cold persisted registry — eliminates broad manifest scans, faster boot, deterministic provider discovery
   - OTEL: Expanded telemetry across model calls, token usage, tool loops, harness runs, exec, delivery, context assembly, memory pressure; Prometheus scrape plugin; W3C traceparent propagation
@@ -2892,46 +2892,46 @@ node scripts/buddy-export.mjs --import ~/alice-backup.tar.gz --force
   - Install: Windows/macOS/Linux/Docker hardening, Node service restarts, LaunchAgent token rotation
   - Cron: Jobs interrupted by restart recorded as failed, one-shots disabled after interruption
   - Security: Device token scope containment, redaction patterns on transcripts, mixed-version gateway detection
-  - (References: https://github.com/openclaw/openclaw/releases/tag/v2026.4.24, https://github.com/openclaw/openclaw/releases/tag/v2026.4.25)
+  - (References: https://github.com/openclaw/openclaw/releases/tag/v2026.7.17.1447, https://github.com/openclaw/openclaw/releases/tag/v2026.4.25)
 
 ### 2026.4.24.1832
-- **OpenClaw pin** v2026.4.21 → v2026.4.23
+- **OpenClaw pin** v2026.7.17.1447 → v2026.4.23
 - **Upstream highlights:**
   - New: Image generation via Codex OAuth (gpt-image-2 without API key), OpenRouter image models, subagent forked context (child inherits parent transcript), per-call timeoutMs for image/video/music/TTS tools, configurable local embedding contextSize (4096 default), Pi packages 0.70.0, Codex harness debug logging
   - Fixes: Block streaming duplicate prevention, Slack MPIM group DM classification, Telegram media markdown parsing, WhatsApp media normalization, webchat error surfacing, memory CLI local embedding resolution, Codex Windows npm shim resolution, image attachment preservation for text-only models, media understanding honors explicit imageModel config
   - Security: Teams cross-bot token replay blocked, Android loopback-only cleartext, pairing private-IP requirement, QA channel URL scheme rejection, Claude CLI bypassPermissions from exec policy, plugin setup-api lookup hardening
-  - (Reference: https://github.com/openclaw/openclaw/releases/tag/v2026.4.23)
+  - (Reference: https://github.com/openclaw/openclaw/releases/tag/v2026.7.17.1447)
 
 ### 2026.4.22.1314
-- **OpenClaw pin** v2026.4.15 → v2026.4.21
+- **OpenClaw pin** v2026.7.17.1447 → v2026.4.21
 - **Upstream highlights:**
   - New: Image generation defaults to `gpt-image-2`, Skill Workshop plugin (captures workflow corrections as reusable skills), Kimi K2.6 on Fireworks, preview streaming for Discord/Slack/Telegram (tool progress in live edits), QQBot self-contained engine with QR onboarding
   - Performance: Plugin startup optimized — Discord 98% faster, Telegram 14s faster, Matrix 1.8s faster, bundled plugin load time 82-90% faster via native Jiti
   - Fixes: ACP parent→child echo loop fix, subagent terminal failures no longer freeze, external content strips chat-template special tokens (Qwen/ChatML, Llama, Gemma, Mistral security), npm `node-domexception` deprecation warning fixed
-  - (Reference: https://github.com/openclaw/openclaw/releases/tag/v2026.4.21)
+  - (Reference: https://github.com/openclaw/openclaw/releases/tag/v2026.7.17.1447)
 
 ### 2026.4.17.0050
-- **OpenClaw pin** v2026.4.14 → v2026.4.15
+- **OpenClaw pin** v2026.7.17.1447 → v2026.4.15
 - **Upstream highlights:**
   - New: Claude Opus 4.7 defaults + bundled image understanding, Gemini TTS (bundled google plugin), Model Auth status card (Control UI), LanceDB cloud storage for memory indexes, GitHub Copilot embeddings provider, `localModelLean: true` experimental flag, plugin runtime deps localized (leaner builds)
   - Fixes: Ollama provider prefix stripped from chat requests (no more 404), Dreaming storage mode defaults to `separate` (daily files no longer polluted), skills snapshot invalidation on config writes (removed skills actually take effect), unknown-tool loop guard enabled by default, Cron NO_REPLY leak fixed, agent replay recovery (401 guidance), HTML error pages treated as transport failures, tilde path resolution for host edits, TTS provider routing fix, CLI transcript persistence for Gemini-backed turns, BlueBubbles catchup retry ceiling, OpenAI Codex transport self-heal, WhatsApp reconnect auth race fix
   - Security: MEDIA: tool trust anchor (client tools can't spoof built-in names), webchat localRoots containment, Matrix DM pairing-store block on room commands, Docker pnpm v10+ native bindings fix
-  - (Reference: https://github.com/openclaw/openclaw/releases/tag/v2026.4.15)
+  - (Reference: https://github.com/openclaw/openclaw/releases/tag/v2026.7.17.1447)
 
 ### 2026.4.14.1520
-- **OpenClaw pin** v2026.4.12 → v2026.4.14
+- **OpenClaw pin** v2026.7.17.1447 → v2026.4.14
 - Upstream: GPT-5.4-pro forward-compat, Telegram forum topic names, Ollama timeout/streaming/slug fixes, memory embedding provider prefix fix, .aac transcription remap, 6 security hardening patches, browser SSRF fixes, context engine compaction, gateway entrypoint unification
-  - (Reference: https://github.com/openclaw/openclaw/releases/tag/v2026.4.14)
+  - (Reference: https://github.com/openclaw/openclaw/releases/tag/v2026.7.17.1447)
 
 ### 2026.4.14.0206
-- **OpenClaw pin** v2026.4.11 → v2026.4.12
+- **OpenClaw pin** v2026.7.17.1447 → v2026.4.12
 - **Upstream highlights:**
   - New: Active Memory plugin (auto-pulls context before replies), Codex provider, LM Studio provider, macOS Talk Mode (MLX speech), exec-policy CLI, plugin loading overhaul (manifest-declared scopes), per-provider allowPrivateNetwork, Gateway commands.list RPC
   - Fixes: Dreaming promotion threshold raised (fixes zero-candidate stalls), light-sleep confidence from all signals, narrative cleanup hardened, memory/QMD recall improvements, orphaned user text recovery, security hardening (busybox, empty approver, shell injection, placeholder credential block), WhatsApp media fallback, keepalive tick fix, CLI update stale chunk fix
-  - (Reference: https://github.com/openclaw/openclaw/releases/tag/v2026.4.12)
+  - (Reference: https://github.com/openclaw/openclaw/releases/tag/v2026.7.17.1447)
 
 ### 2026.4.12.1825
-- **OpenClaw pin** v2026.4.9 → v2026.4.11
+- **OpenClaw pin** v2026.7.17.1447 → v2026.4.11
 - **Upstream highlights:**
   - Dreaming: ChatGPT import ingestion + Memory Palace diary subtabs
   - Control UI: `[embed ...]` rich output tag, media/voice directive bubbles
@@ -2949,7 +2949,7 @@ node scripts/buddy-export.mjs --import ~/alice-backup.tar.gz --force
 - **Platform requirements** — Docs now explicitly state supported platforms (macOS, Linux, Windows via WSL 2)
 
 ### 2026.4.9.1353
-- **OpenClaw pin** v2026.4.8 → v2026.4.9 — Dreaming REM backfill, agent idle timeout fix, npm packaging, security hardening
+- **OpenClaw pin** v2026.7.17.1447 → v2026.4.9 — Dreaming REM backfill, agent idle timeout fix, npm packaging, security hardening
 
 ### 2026.4.9
 - **Docker channel plugin fix** (Issue #17) — postinstall-bundled-plugins.mjs skip workaround for git clone builds
