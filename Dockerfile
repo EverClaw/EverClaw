@@ -44,7 +44,7 @@
 #   TZ                        — Timezone for the agent (default: UTC, e.g. America/New_York)
 #   EVERCLAW_DEFAULT_MODEL    — Default AI model (default: glm-5)
 #   EVERCLAW_AUTH_TOKEN       — Legacy alias for proxy auth (default: morpheus-local)
-#   EVERCLAW_SECURITY_TIER    — Security tier: low|recommended|maximum (default: recommended)
+#   EVERCLAW_SECURITY_TIER    — Security tier: low|recommended|maximum (default: low)
 #   WALLET_PRIVATE_KEY        — For local P2P staking (optional, use secrets in production)
 #   OPENCLAW_ENABLE_DEVICE_AUTH=true — Re-enable device auth (default: disabled for containers)
 
@@ -144,8 +144,49 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     jq \
     age \
     zstd \
+    python3 \
+    python3-pip \
+    zip \
+    unzip \
+    ffmpeg \
+    gnupg \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
+
+# ─── Install Java 21 (Temurin JRE) for signal-cli ────────────────────────────
+RUN curl -fsSL https://packages.adoptium.net/artifactory/api/gpg/key/public | gpg --dearmor -o /usr/share/keyrings/adoptium.gpg \
+    && echo "deb [signed-by=/usr/share/keyrings/adoptium.gpg] https://packages.adoptium.net/artifactory/deb bookworm main" | tee /etc/apt/sources.list.d/adoptium.list > /dev/null \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends temurin-21-jre \
+    && rm -rf /var/lib/apt/lists/*
+
+# ─── Install signal-cli ──────────────────────────────────────────────────────
+ARG SIGNAL_CLI_VERSION=0.14.5
+RUN curl -sL -o /tmp/signal-cli.tar.gz \
+    "https://github.com/AsamK/signal-cli/releases/download/v${SIGNAL_CLI_VERSION}/signal-cli-${SIGNAL_CLI_VERSION}.tar.gz" \
+    && tar -xzf /tmp/signal-cli.tar.gz -C /opt \
+    && ln -sf /opt/signal-cli-${SIGNAL_CLI_VERSION}/bin/signal-cli /usr/local/bin/signal-cli \
+    && rm /tmp/signal-cli.tar.gz
+
+# ─── Install GitHub CLI ───────────────────────────────────────────────────────
+RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends gh \
+    && rm -rf /var/lib/apt/lists/*
+
+# ─── Install Brave Browser (headless browser automation) ─────────────────────
+RUN curl -fsSLo /usr/share/keyrings/brave-browser-archive-keyring.gpg \
+    https://brave-browser-apt-release.s3.brave.com/brave-browser-archive-keyring.gpg \
+    && echo "deb [signed-by=/usr/share/keyrings/brave-browser-archive-keyring.gpg] https://brave-browser-apt-release.s3.brave.com/ stable main" | tee /etc/apt/sources.list.d/brave-browser-release.list > /dev/null \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends brave-browser \
+    && rm -rf /var/lib/apt/lists/*
+
+# ─── Install Whisper (speech-to-text, CPU-only torch, model downloads on demand)
+RUN pip3 install --no-cache-dir --break-system-packages \
+    torch --index-url https://download.pytorch.org/whl/cpu \
+    && pip3 install --no-cache-dir --break-system-packages openai-whisper
 
 # Create all persistent directories (for Barney + local Docker)
 RUN mkdir -p /home/node/.openclaw/workspace/skills/everclaw \

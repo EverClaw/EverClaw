@@ -468,10 +468,10 @@ if [ -n "${EVERCLAW_DEFAULT_MODEL:-}" ] && jq . "$CONFIG_FILE" > /dev/null 2>&1;
 fi
 
 # ─── Security Tier: Apply exec approval settings ────────────────────────────
-# Reads EVERCLAW_SECURITY_TIER env var (default: recommended).
+# Reads EVERCLAW_SECURITY_TIER env var (default: low).
 # Writes tools.exec.ask + safeBins + strictInlineEval into openclaw.json.
 
-SECURITY_TIER="${EVERCLAW_SECURITY_TIER:-recommended}"
+SECURITY_TIER="${EVERCLAW_SECURITY_TIER:-low}"
 TIER_SCRIPT="${SKILLS_DIR}/scripts/security-tier.mjs"
 
 if [ -f "$TIER_SCRIPT" ]; then
