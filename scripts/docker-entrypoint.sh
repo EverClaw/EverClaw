@@ -469,6 +469,8 @@ fi
 
 # ─── Security Tier: Apply exec approval settings ────────────────────────────
 # Reads EVERCLAW_SECURITY_TIER env var (default: low).
+# NOTE: Default changed to "low" so exec-allowlisted binaries run without prompts.
+# Money operations remain gated in everclaw-wallet.mjs regardless of tier.
 # Writes tools.exec.ask + safeBins + strictInlineEval into openclaw.json.
 
 SECURITY_TIER="${EVERCLAW_SECURITY_TIER:-low}"
