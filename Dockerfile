@@ -190,10 +190,17 @@ RUN curl -fsSLo /usr/share/keyrings/brave-browser-archive-keyring.gpg \
     && apt-get install -y --no-install-recommends brave-browser \
     && rm -rf /var/lib/apt/lists/*
 
+# Brave/Chromium requires --no-sandbox in Docker containers (no CAP_SYS_ADMIN).
+# These env vars are picked up by OpenClaw's browser tool when launching Brave.
+ENV BRAVE_PATH="/usr/bin/brave-browser" \
+    BRAVE_FLAGS="--headless=new --no-sandbox --disable-dev-shm-usage --disable-gpu"
+
 # ─── Install Whisper (speech-to-text, CPU-only torch, model downloads on demand)
 RUN pip3 install --no-cache-dir --break-system-packages \
     torch --index-url https://download.pytorch.org/whl/cpu \
-    && pip3 install --no-cache-dir --break-system-packages openai-whisper
+    && pip3 install --no-cache-dir --break-system-packages \
+    --extra-index-url https://download.pytorch.org/whl/cpu \
+    openai-whisper
 
 # Create all persistent directories (for Barney + local Docker)
 RUN mkdir -p /home/node/.openclaw/workspace/skills/everclaw \
