@@ -44,7 +44,9 @@
 #   TZ                        — Timezone for the agent (default: UTC, e.g. America/New_York)
 #   EVERCLAW_DEFAULT_MODEL    — Default AI model (default: glm-5)
 #   EVERCLAW_AUTH_TOKEN       — Legacy alias for proxy auth (default: morpheus-local)
-#   EVERCLAW_SECURITY_TIER    — Security tier: low|recommended|maximum (default: recommended)
+#   EVERCLAW_SECURITY_TIER    — Security tier: low|recommended|maximum (default: low)
+#   !!! WARNING: "low" disables exec approval prompts for ALL allowlisted binaries !!!
+#   !!! Money operations remain gated at app layer (everclaw-wallet.mjs) regardless !!!
 #   WALLET_PRIVATE_KEY        — For local P2P staking (optional, use secrets in production)
 #   OPENCLAW_ENABLE_DEVICE_AUTH=true — Re-enable device auth (default: disabled for containers)
 
@@ -144,8 +146,61 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     jq \
     age \
     zstd \
+    python3 \
+    python3-pip \
+    zip \
+    unzip \
+    ffmpeg \
+    gnupg \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
+
+# ─── Install Java 21 (Temurin JRE) for signal-cli ────────────────────────────
+RUN curl -fsSL https://packages.adoptium.net/artifactory/api/gpg/key/public | gpg --dearmor -o /usr/share/keyrings/adoptium.gpg \
+    && echo "deb [signed-by=/usr/share/keyrings/adoptium.gpg] https://packages.adoptium.net/artifactory/deb bookworm main" | tee /etc/apt/sources.list.d/adoptium.list > /dev/null \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends temurin-21-jre \
+    && rm -rf /var/lib/apt/lists/*
+
+# ─── Install signal-cli (with SHA256 checksum verification) ────────────────
+ARG SIGNAL_CLI_VERSION=0.14.5
+RUN curl -sL -o /tmp/signal-cli.tar.gz \
+    "https://github.com/AsamK/signal-cli/releases/download/v${SIGNAL_CLI_VERSION}/signal-cli-${SIGNAL_CLI_VERSION}.tar.gz" \
+    && echo "62d38ebfef3988d78f437e7328183b75ee549d111382e66c1af70d3ebd3cd7a7  /tmp/signal-cli.tar.gz" | sha256sum -c - \
+    && tar -xzf /tmp/signal-cli.tar.gz -C /opt \
+    && ln -sf /opt/signal-cli-${SIGNAL_CLI_VERSION}/bin/signal-cli /usr/local/bin/signal-cli \
+    && rm /tmp/signal-cli.tar.gz
+
+# ─── Install GitHub CLI ───────────────────────────────────────────────────────
+RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends gh \
+    && rm -rf /var/lib/apt/lists/*
+
+# ─── Install Brave Browser (headless browser automation) ─────────────────────
+# NOTE: Brave is a full Chromium-based browser (~400MB). It is installed for
+# OpenClaw's browser tool (headless automation). The attack surface includes
+# the Chromium engine + sandbox. This is acceptable for InstallOpenClaw.xyz
+# containers where the user owns and controls the agent.
+RUN curl -fsSLo /usr/share/keyrings/brave-browser-archive-keyring.gpg \
+    https://brave-browser-apt-release.s3.brave.com/brave-browser-archive-keyring.gpg \
+    && echo "deb [signed-by=/usr/share/keyrings/brave-browser-archive-keyring.gpg] https://brave-browser-apt-release.s3.brave.com/ stable main" | tee /etc/apt/sources.list.d/brave-browser-release.list > /dev/null \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends brave-browser \
+    && rm -rf /var/lib/apt/lists/*
+
+# Brave/Chromium requires --no-sandbox in Docker containers (no CAP_SYS_ADMIN).
+# These env vars are picked up by OpenClaw's browser tool when launching Brave.
+ENV BRAVE_PATH="/usr/bin/brave-browser" \
+    BRAVE_FLAGS="--headless=new --no-sandbox --disable-dev-shm-usage --disable-gpu"
+
+# ─── Install Whisper (speech-to-text, CPU-only torch, model downloads on demand)
+RUN pip3 install --no-cache-dir --break-system-packages \
+    torch --index-url https://download.pytorch.org/whl/cpu \
+    && pip3 install --no-cache-dir --break-system-packages \
+    --extra-index-url https://download.pytorch.org/whl/cpu \
+    openai-whisper
 
 # Create all persistent directories (for Barney + local Docker)
 RUN mkdir -p /home/node/.openclaw/workspace/skills/everclaw \
