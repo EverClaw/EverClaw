@@ -12,7 +12,7 @@
 # Override by mounting your own config at ~/.openclaw/openclaw.json
 
 services:
-  everclaw:2026.7.11.0248
+  everclaw:
     image: ghcr.io/everclaw/everclaw:2026.7.17.1447
     build:
       context: .
@@ -22,6 +22,12 @@ services:
         OPENCLAW_VERSION: "v2026.5.27"       # OpenClaw version — always uses 'v' prefix (see Dockerfile policy)
     container_name: everclaw
     restart: unless-stopped
+    # Manifest retention partitioning — per-customer restore quota isolation.
+    # Set MORPHEUS_OPENCLAW_LABEL to a stable per-customer ID (A-Z a-z 0-9 . _ - only, 1-64 chars).
+    # Ensures each customer gets their own guaranteed restore quota for soft-deleted leases.
+    # See: https://docs.manifest.cloud/retention-partitioning
+    labels:
+      morpheus-openclaw: "${MORPHEUS_OPENCLAW_LABEL:-openclaw-default}"
     ports:
       # Default: accessible from all interfaces.
       # For local-only use, bind to localhost instead:
