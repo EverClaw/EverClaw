@@ -27,7 +27,7 @@ services:
     # Ensures each customer gets their own guaranteed restore quota for soft-deleted leases.
     # See: https://docs.manifest.cloud/retention-partitioning
     labels:
-      morpheus-openclaw: "${MORPHEUS_OPENCLAW_LABEL:-openclaw-default}"
+      morpheus-openclaw: "${MORPHEUS_OPENCLAW_LABEL:?Set MORPHEUS_OPENCLAW_LABEL to your unique customer ID — see docs.manifest.cloud/retention-partitioning}"
     ports:
       # Default: accessible from all interfaces.
       # For local-only use, bind to localhost instead:
