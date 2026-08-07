@@ -23,11 +23,12 @@ services:
     container_name: everclaw
     restart: unless-stopped
     # Manifest retention partitioning — per-customer restore quota isolation.
-    # Set MORPHEUS_OPENCLAW_LABEL to a stable per-customer ID (A-Z a-z 0-9 . _ - only, 1-64 chars).
     # Ensures each customer gets their own guaranteed restore quota for soft-deleted leases.
+    # Defaults to a per-installation hostname-derived ID for unique partitioning with no config needed.
+    # Override MORPHEUS_OPENCLAW_LABEL with a stable per-customer ID (A-Z a-z 0-9 . _ - only, 1-64 chars).
     # See: https://docs.manifest.cloud/retention-partitioning
     labels:
-      morpheus-openclaw: "${MORPHEUS_OPENCLAW_LABEL:?Set MORPHEUS_OPENCLAW_LABEL to your unique customer ID — see docs.manifest.cloud/retention-partitioning}"
+      morpheus-openclaw: "${MORPHEUS_OPENCLAW_LABEL:-${HOSTNAME:-everclaw}}"
     ports:
       # Default: accessible from all interfaces.
       # For local-only use, bind to localhost instead:

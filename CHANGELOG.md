@@ -6,7 +6,7 @@ All notable changes to EverClaw are documented here.
 
 ### Added — Manifest Retention Partitioning
 
-- **docker-compose.yml:** Added `morpheus-openclaw` label to the `everclaw` service for Manifest platform retention partitioning. Each customer gets their own guaranteed restore quota for soft-deleted leases (5 most-recent closed leases per customer). Set `MORPHEUS_OPENCLAW_LABEL` env var to a stable per-customer ID (A-Z a-z 0-9 . _ -, 1-64 chars).
+- **docker-compose.yml:** Added `morpheus-openclaw` label to the `everclaw` service for Manifest platform retention partitioning. Each customer gets their own guaranteed restore quota for soft-deleted leases (5 most-recent closed leases per customer). Defaults to a per-installation hostname-derived ID (`${HOSTNAME:-everclaw}`) so no config is required and no breakage occurs on existing deployments; override `MORPHEUS_OPENCLAW_LABEL` with a stable per-customer ID (A-Z a-z 0-9 . _ -, 1-64 chars) for explicit control.
 
 ### Fixed
 
