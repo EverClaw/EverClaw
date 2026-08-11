@@ -165,13 +165,19 @@ export class MemoryHub {
   }
 
   _withAsset(result) {
-    // Only use real filepath metadata as a path hint. `metadata.source` is a
-    // class-tag in classifyRecord (e.g. 'daily' -> +1 Chat), so using it as a
-    // path fallback would collide ('daily' as a path boosts Chat twice).
+    // Harden arbitrary backend shapes before classification so a bad/missing
+    // field never throws past the hub's fail-soft wrapper (only real filepath
+    // metadata is a path hint; metadata.source is a classifyRecord class-tag).
+    const srcFile = result?.metadata?.source_file;
+    const rawPath = result?.path;
     const record = {
-      path: result.metadata?.source_file || result.path || null,
-      content: result.content || '',
-      metadata: result.metadata || {},
+      path:
+        typeof srcFile === 'string' ? srcFile :
+        typeof rawPath === 'string' ? rawPath :
+        '',
+      content: typeof result?.content === 'string' ? result.content : '',
+      metadata:
+        result?.metadata && typeof result.metadata === 'object' ? result.metadata : {},
     };
     const scored = classifyRecord(record);
     return { ...result, asset: rankAssets(scored)[0] };

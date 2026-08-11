@@ -230,4 +230,24 @@ describe('MemoryHub', () => {
     assert.ok(results.length === 1);
     assert.ok([ASSETS.CHAT, ASSETS.SKILL, ASSETS.WIKI, ASSETS.CODE].includes(results[0].asset));
   });
+
+  it('handles a backend returning non-string / malformed record shapes', async () => {
+    const messy = {
+      name: 'Messy',
+      async search() {
+        return [
+          { id: '1', content: 42, metadata: 'not-an-object' },          // non-string content, string metadata
+          { id: '2', path: 123, content: 'ok', metadata: { source_file: 456 } }, // non-string path + source_file
+          { id: '3' },                                                      // bare record
+        ];
+      },
+      async status() { return { healthy: true, factCount: 3 }; },
+    };
+    const hub = new MemoryHub(messy);
+    const results = await hub.search('anything');
+    assert.strictEqual(results.length, 3);
+    for (const r of results) {
+      assert.ok([ASSETS.CHAT, ASSETS.SKILL, ASSETS.WIKI, ASSETS.CODE].includes(r.asset));
+    }
+  });
 });

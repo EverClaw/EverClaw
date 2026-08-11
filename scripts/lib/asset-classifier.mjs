@@ -89,7 +89,9 @@ const TEXT_SIGNALS = [
  */
 export function classifyPath(path = '') {
   const scored = _emptyScores();
-  if (!path) return scored;
+  // Guard non-strings so a backend-provided non-string path can never throw
+  // past the caller's fail-soft wrapper (toLowerCase would throw).
+  if (typeof path !== 'string' || !path) return scored;
 
   const lower = path.toLowerCase();
   // Word-joins (standard-operating / daily_log) must match the pattern tokens.
@@ -146,7 +148,7 @@ export function classifyPath(path = '') {
  */
 export function classifyText(text = '') {
   const scored = _emptyScores();
-  if (!text) return scored;
+  if (typeof text !== 'string' || !text) return scored;
 
   const lower = text.toLowerCase();
   for (const group of TEXT_SIGNALS) {
