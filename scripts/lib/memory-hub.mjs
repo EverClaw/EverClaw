@@ -85,7 +85,10 @@ export class MemoryHub {
    */
   async assetSummary(options = {}) {
     const sampleSize = options.sampleSize || 5;
-    const limit = Math.min(options.limit ?? MAX_SUMMARY_LIMIT, MAX_SUMMARY_LIMIT);
+    // Clamp limit to a finite, non-negative integer <= MAX_SUMMARY_LIMIT so a
+    // caller-passed -1 / NaN / Infinity never reaches the backend unguarded.
+    const rawLimit = Number.isFinite(options.limit) ? options.limit : MAX_SUMMARY_LIMIT;
+    const limit = Math.min(Math.max(0, rawLimit), MAX_SUMMARY_LIMIT);
     const raw = await this._safeSearch('', { limit });
 
     const counts = Object.fromEntries(ALL_ASSETS.map((a) => [a, 0]));
@@ -141,10 +144,16 @@ export class MemoryHub {
   _withTimeout(promise) {
     if (!this.timeout || this.timeout <= 0) return promise;
     let timer;
+    const p = Promise.resolve(promise);
     const timeout = new Promise((_, reject) => {
       timer = setTimeout(() => reject(new Error('search timeout')), this.timeout);
     });
-    return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+    return Promise.race([p, timeout]).finally(() => {
+      clearTimeout(timer);
+      // The losing side (typically a slow backend) may reject after the timeout
+      // wins — attach a no-op catch so Node never sees an unhandled rejection.
+      p.catch(() => {});
+    });
   }
 
   async _safeStatus() {
@@ -156,8 +165,11 @@ export class MemoryHub {
   }
 
   _withAsset(result) {
+    // Only use real filepath metadata as a path hint. `metadata.source` is a
+    // class-tag in classifyRecord (e.g. 'daily' -> +1 Chat), so using it as a
+    // path fallback would collide ('daily' as a path boosts Chat twice).
     const record = {
-      path: result.metadata?.source_file || result.metadata?.source || null,
+      path: result.metadata?.source_file || result.path || null,
       content: result.content || '',
       metadata: result.metadata || {},
     };

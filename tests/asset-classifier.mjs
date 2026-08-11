@@ -67,6 +67,17 @@ describe('Asset Classifier', () => {
       assert.ok(s[ASSETS.CODE] < 3, 'src-notes must not get the strong segment boost');
     });
 
+    it('does not give a strong boost to short code tokens inside longer words', () => {
+      // 'sop' inside 'sophisticated' and 'lib' inside 'library-guide' must NOT
+      // get the strong +3 prefix boost; only the weak +1 substring signal is OK.
+      // (src-notes.md IS a genuine source file, so Code +3 is defensible —
+      //  tested separately in the segment test above.)
+      const s = classifyPath('docs/sophisticated.md');
+      assert.ok(s[ASSETS.SKILL] < 3, 'sophisticated must not get the strong Skill prefix boost');
+      const l = classifyPath('docs/library-guide.md');
+      assert.ok(l[ASSETS.CODE] < 3, 'library-guide must not get the strong Code prefix boost');
+    });
+
     it('handles empty path without throwing', () => {
       const s = classifyPath('');
       assert.ok(typeof s[ASSETS.CHAT] === 'number');

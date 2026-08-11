@@ -124,6 +124,44 @@ describe('MemoryHub', () => {
     assert.strictEqual(summary.truncated, true, 'cap-binding search should flag truncated');
   });
 
+  it('assetSummary clamps negative/NaN/Infinity limits', async () => {
+    const hub = new MemoryHub(makeFakeBackend(FACTS));
+    for (const bad of [-1, NaN, Infinity, 'x']) {
+      const summary = await hub.assetSummary({ limit: bad });
+      assert.strictEqual(typeof summary.total, 'number', 'summary should not throw on bad limit');
+      assert.ok(Number.isInteger(summary.assets[ASSETS.CHAT].count), 'counts stay integers');
+    }
+  });
+
+  it('labels a source:daily record (no file path) as Chat via +1 only', async () => {
+    const daily = {
+      name: 'DailyOnly',
+      async search() {
+        return [{ id: '1', content: 'a conversation note', metadata: { source: 'daily' } }];
+      },
+      async status() { return { healthy: true, factCount: 1 }; },
+    };
+    const hub = new MemoryHub(daily);
+    const results = await hub.search('');
+    // source:'daily' +1 alone (no path file) => Chat labels without being over-boosted.
+    assert.strictEqual(results[0].asset, ASSETS.CHAT);
+  });
+
+  it('does not emit an unhandled rejection when the backend rejects after timeout', async () => {
+    const lateReject = {
+      name: 'LateReject',
+      async search() {
+        return new Promise((_, reject) => setTimeout(() => reject(new Error('too slow')), 80));
+      },
+      async status() { return { healthy: true, factCount: 0 }; },
+    };
+    const hub = new MemoryHub(lateReject, { searchTimeoutMs: 10 });
+    const results = await hub.search('x');
+    assert.deepStrictEqual(results, [], 'timeout should win with empty results');
+    await new Promise((r) => setTimeout(r, 120)); // let the late rejection fire
+    assert.ok(true, 'no unhandled rejection surfaced');
+  });
+
   it('honors searchTimeoutMs (times out a slow backend)', async () => {
     const slow = {
       name: 'Slow',

@@ -104,10 +104,23 @@ export function classifyPath(path = '') {
 
   for (const group of PATH_SIGNALS) {
     const cleaned = group.patterns;
+    // Short tokens like 'sop'/'src'/'lib' are raw prefixes only when the basename
+    // actually starts a real word ('.' join, '-', '_'), never inside a longer word
+    // (so 'sophisticated.md'/'library-guide.md' don't false-positive).
+    const prefixHit = cleaned.some((p) => {
+      if (!p) return false;
+      const baseNoExt = stripExt(basename);
+      return (
+        baseNoExt === p ||
+        basename.startsWith(p + '.') ||
+        basename.startsWith(p + '-') ||
+        basename.startsWith(p + '_')
+      );
+    });
     const segHit =
       segments.some((s) => cleaned.includes(s) || cleaned.includes(stripExt(s))) ||
       normSegments.some((s) => cleaned.includes(s)) ||
-      cleaned.some((p) => p && basename.startsWith(p));
+      prefixHit;
     if (segHit) {
       scored[group.asset] += 3;
     } else if (group.patterns.some((p) => lower.includes(p))) {
