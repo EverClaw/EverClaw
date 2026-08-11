@@ -96,13 +96,16 @@ export function classifyPath(path = '') {
   // Normalize per-segment by stripping separators, THEN compare to the token
   // set — never a global substring, or 'src-notes' would false-positive 'src'.
   const segments = lower.split(/[\\/]/).filter(Boolean);
-  const normSegments = segments.map((s) => s.replace(/[_-]+/g, ''));
+  // Strip the file extension before normalized comparison so 'standard-operating.md'
+  // normalizes to 'standardoperating' (== the pattern token), not 'standardoperating.md'.
+  const stripExt = (s) => s.replace(/\.[^.]+$/, '');
+  const normSegments = segments.map((s) => stripExt(s).replace(/[_-]+/g, ''));
   const basename = segments[segments.length - 1] || '';
 
   for (const group of PATH_SIGNALS) {
     const cleaned = group.patterns;
     const segHit =
-      segments.some((s) => cleaned.includes(s)) ||
+      segments.some((s) => cleaned.includes(s) || cleaned.includes(stripExt(s))) ||
       normSegments.some((s) => cleaned.includes(s)) ||
       cleaned.some((p) => p && basename.startsWith(p));
     if (segHit) {
@@ -172,7 +175,12 @@ export function classifyRecord(record = {}) {
   const combined = _emptyScores();
   for (const asset of ALL_ASSETS) {
     combined[asset] = (pathScore[asset] || 0) * 3 + (textScore[asset] || 0);
-    if (ALL_ASSETS.includes(metadata.asset)) combined[metadata.asset] += 3;
+  }
+  // Apply the metadata hint AFTER the per-asset loop so the +3 is exactly +3
+  // (never multiplied by loop-remaining iterations or wiped by reassignment),
+  // and only when it names a real asset (allowlist).
+  if (ALL_ASSETS.includes(metadata.asset)) {
+    combined[metadata.asset] += 3;
   }
   if (metadata.source === 'daily') combined[ASSETS.CHAT] += 1;
 

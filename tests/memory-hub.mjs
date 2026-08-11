@@ -100,8 +100,9 @@ describe('MemoryHub', () => {
     const scoredBackend = {
       name: 'Scored',
       async search() {
+        // Same asset (Wiki) so ordering must fall back to backend score, not intent weight.
         return [
-          { id: 'weak-chat', content: 'a', score: 0.1, metadata: { source_file: 'memory/daily/a.md' } },
+          { id: 'weak-wiki', content: 'a', score: 0.1, metadata: { source_file: 'memory/references/weak.md' } },
           { id: 'strong-wiki', content: 'a', score: 0.99, metadata: { source_file: 'memory/references/strong.md' } },
         ];
       },
@@ -110,6 +111,7 @@ describe('MemoryHub', () => {
     const hub = new MemoryHub(scoredBackend);
     const results = await hub.search('what is the definition'); // Wiki intent
     assert.strictEqual(results[0].id, 'strong-wiki', 'stronger backend score should win the tie');
+    assert.strictEqual(results[1].id, 'weak-wiki', 'weaker backend score should sort second');
   });
 
   it('assetSummary flags truncation when the cap binds', async () => {

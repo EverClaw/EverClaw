@@ -52,10 +52,12 @@ describe('Asset Classifier', () => {
     });
 
     it('matches word-join path variants (standard-operating)', () => {
-      const s = classifyPath('playbooks/standard-operating.md');
-      assert.ok(s[ASSETS.SKILL] > 0, 'standard-operating should normalize to Skill path signal');
-      const s2 = classifyPath('playbooks/standard_operating.md');
-      assert.ok(s2[ASSETS.SKILL] > 0, 'standard_operating should normalize to Skill');
+      // Neutral parent (docs/) so the Skill score comes ONLY from word-join
+      // normalization, not a coincidental 'playbook' pattern hit.
+      const s = classifyPath('docs/standard-operating.md');
+      assert.strictEqual(s[ASSETS.SKILL], 3, 'standard-operating.md should normalize to pattern standardoperating');
+      const s2 = classifyPath('docs/standard_operating.md');
+      assert.strictEqual(s2[ASSETS.SKILL], 3, 'standard_operating.md should normalize to Skill');
     });
 
     it('does not give a strong Code-Graph boost to a substring-only code dir', () => {
@@ -117,6 +119,13 @@ describe('Asset Classifier', () => {
     it('adds +1 for daily source metadata exactly once', () => {
       const s = classifyRecord({ content: 'x', metadata: { source: 'daily' } });
       assert.strictEqual(s[ASSETS.CHAT], 1, 'daily source should add exactly +1 to Chat');
+    });
+
+    it('respects metadata asset hint (exactly +3 for each real asset)', () => {
+      for (const a of [ASSETS.CHAT, ASSETS.SKILL, ASSETS.WIKI, ASSETS.CODE]) {
+        const s = classifyRecord({ content: 'plain', metadata: { asset: a } });
+        assert.strictEqual(s[a], 3, `hint ${a} must boost exactly +3`);
+      }
     });
 
     it('ignores an invalid metadata asset hint (allowlist)', () => {
