@@ -45,6 +45,10 @@ jobs:
         run: |
           # Check if we should build only the generic image
           FILTER="${{ github.event.inputs.flavor_filter }}"
+          # Staging branch always builds generic-only (SSO pin verification; never touch latest).
+          if [ "${{ github.ref }}" = "refs/heads/staging" ]; then
+            FILTER="generic-only"
+          fi
           
           if [ "$FILTER" = "generic-only" ]; then
             # Only build the generic image
@@ -135,6 +139,7 @@ jobs:
             # Staging builds: tag as "staging" and version-staging (never overwrites latest)
             type=raw,value=staging,enable=${{ github.ref == 'refs/heads/staging' }}
             type=raw,value=${{ steps.version.outputs.VERSION }}-staging,enable=${{ github.ref == 'refs/heads/staging' }}
+            type=raw,value=staging-openclaw-2026.7.1-2,enable=${{ github.ref == 'refs/heads/staging' }}
             # PR builds: tag with PR number (not pushed)
             type=ref,event=pr
 
