@@ -1,6 +1,6 @@
 ---
 name: everclaw
-version: 2026.7.11.0248
+version: 2026.8.12.2040
 # NOTE: Description must stay identical to root SKILL.md. Update both files together.
 description: Open-source first AI inference — GLM-5 as default, Claude as fallback only. Own your inference forever via the [REDACTED] decentralized network. Stake MOR tokens, access GLM-5, GLM-4.7 Flash, Kimi K2.5, and 30+ models with persistent inference by recycling staked MOR. Open-source first model router routes all tiers to [REDACTED] by default — Claude only kicks in as an escape hatch when needed. Includes [REDACTED] API Gateway bootstrap for zero-config startup, OpenAI-compatible proxy with auto-session management, automatic retry with fresh sessions, OpenAI-compatible error classification to prevent cooldown cascades, multi-key auth rotation v2 with proactive DIEM balance monitoring and reactive 402 watchdog, Gateway Guardian v5 with direct curl inference probes (eliminates Signal spam), proactive Venice DIEM credit monitoring, circuit breaker for stuck sub-agents, nuclear self-healing restart, always-on proxy-router with launchd auto-restart, smart session archiver, three-shift cyclic execution engine (v2 with 15-minute execution loops), 24/7 always-on power configuration for macOS, bundled security skills, zero-dependency wallet management via macOS Keychain, x402 payment client for agent-to-agent USDC payments, ERC-8004 agent registry reader for discovering trustless agents on Base, and hardware-aware local Ollama fallback with auto model selection (Gemma 4 family: E2B/E4B/26B/31B with vision + audio, based on available RAM/GPU).
 homepage: https://everclaw.com
@@ -1217,7 +1217,7 @@ The watchdog catches the first two patterns (the most common Venice billing erro
 
 ---
 
-## 14. Gateway Guardian v5 (v2026.7.17.1447)
+## 14. Gateway Guardian v5 (v2026.8.12.2040)
 
 A self-healing, billing-aware watchdog that monitors the OpenClaw [REDACTED] and its ability to run inference. Runs every 2 minutes via launchd.
 
@@ -1639,7 +1639,7 @@ if (agent.x402Support && apiEndpoint) {
 
 ---
 
-## Quick Reference (v2026.7.17.1447)
+## Quick Reference (v2026.8.12.2040)
 
 | Action | Command |
 |--------|---------|
@@ -2183,7 +2183,7 @@ sudo pmset -a displaysleep 0
 
 ---
 
-## 21. Three-Shift Task Planning (v2026.7.17.1447)
+## 21. Three-Shift Task Planning (v2026.8.12.2040)
 
 A structured task planning system that proposes prioritized work plans at the start of each 8-hour shift. Nothing executes without user approval.
 
@@ -2227,7 +2227,7 @@ See `three-shifts/SKILL.md` for full documentation including approval workflows,
 
 ---
 
-## 22. Backup & Restore (v2026.7.17.1447)
+## 22. Backup & Restore (v2026.8.12.2040)
 
 Everclaw includes a comprehensive backup and restore system for disaster recovery and migration. All backups are encrypted with AGE encryption, portable across machines, and support both host and Docker environments.
 
@@ -2478,7 +2478,7 @@ backup.tar.zst.age (AGE encrypted)
   "components": ["openclaw", "morpheus", "everclaw"],
   "sizes": { "openclaw": 5242880, "morpheus": 1048576, "everclaw": 4096 },
   "checksums": { "openclaw": "sha256:...", "morpheus": "sha256:..." },
-  "versions": { "openclaw": "2026.5.27", "everclaw": "2026.5.28.1854" }
+  "versions": { "openclaw": "2026.7.1-2", "everclaw": "2026.8.12.2040" }
 }
 ```
 
@@ -2637,7 +2637,7 @@ When the restored agent boots and detects a migration note in today's daily memo
 
 ---
 
-## 23. Enhanced Memory with MemPalace (v2026.7.17.1447)
+## 23. Enhanced Memory with MemPalace (v2026.8.12.2040)
 
 Optional upgrade to EverClaw's memory backend using [MemPalace](https://github.com/AiEnigma-Labs/MemPalace) — a local-first memory system with ChromaDB vector search, temporal knowledge graph, and hierarchical organization (wings/rooms/drawers).
 
@@ -2750,7 +2750,7 @@ MemPalace stores data locally in `~/.mempalace/`. Exported vaults may contain PI
 
 ---
 
-## 24. Buddy Bots — Multi-Agent Family Network (v2026.7.17.1447)
+## 24. Buddy Bots — Multi-Agent Family Network (v2026.8.12.2040)
 
 Deploy a network of AI agents that coordinate on behalf of their humans over secure XMTP V6 messaging. Each family member, friend, or colleague gets their own buddy bot that can schedule, recommend, plan, and remind — without exposing raw personal data.
 
@@ -2848,6 +2848,12 @@ node scripts/buddy-export.mjs --import ~/alice-backup.tar.gz --force
 ---
 
 ## Changelog
+
+### 2026.8.12.2040
+- **OpenClaw pin** v2026.5.27 → v2026.7.1-2
+- **Upstream highlights (v2026.7.1-2):**
+  - Fix: npm plugin updates accept singleton-array metadata from newer npm clients so tracked official plugins install/update to correction releases
+  - (Reference: https://github.com/openclaw/openclaw/releases/tag/v2026.7.1-2)
 
 ### 2026.5.15.1418
 - **OpenClaw pin** v2026.7.17.1447 → v2026.5.12

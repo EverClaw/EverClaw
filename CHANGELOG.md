@@ -2,6 +2,27 @@
 
 All notable changes to EverClaw are documented here.
 
+## [2026.8.12.2040] - 2026-08-12
+
+### Changed — OpenClaw Pin v2026.5.27 → v2026.7.1-2
+
+- **Dockerfile:** OpenClaw build target updated to `v2026.7.1-2`; replaced stale SSO blocker pin comment with a promotion note (SSO `/auth/handoff` verified end-to-end on the staging image 2026-08-12). `EVERCLAW_VERSION` default aligned to `2026.8.12.2040`.
+- **docker-compose.yml:** Image tag and `OPENCLAW_VERSION`/`EVERCLAW_VERSION` build args updated.
+- **package.json:** Version bump to `2026.8.12.2040`.
+- **VERSION:** Updated to `v2026.8.12.2040`.
+- **SKILL.md (root):** Version frontmatter, section headers, diagnostics JSON, and changelog updated.
+- **packages/core/version.json:** Version/buildDate updated.
+- **CHANGELOG.md:** New entry.
+
+### Upstream Highlights (OpenClaw v2026.7.1-2)
+
+#### Fixes
+- **npm plugin updates:** Accept singleton-array metadata from newer npm clients so tracked official plugins can install and update to correction releases. ([#108336](https://github.com/openclaw/openclaw/pull/108336))
+
+(Reference: https://github.com/openclaw/openclaw/releases/tag/v2026.7.1-2)
+
+---
+
 ## [Unreleased] - 2026-07-26
 
 ### Added — KAT-Coder RL Reward Patterns library (OSSAI-016)
