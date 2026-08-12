@@ -4,6 +4,19 @@ All notable changes to EverClaw are documented here.
 
 ## [Unreleased] - 2026-07-26
 
+### Added — KAT-Coder RL Reward Patterns library (OSSAI-016)
+
+- **scripts/lib/rewards.mjs (new):** Deterministic reward-signal reference library from the
+  Kwaipilot KAT-Coder-V2.5-Dev RL post-mortem (69.4% SWE-bench Verified). Implements the four
+  penalty signals + hierarchical credit that prevented agentic collapse under binary rewards:
+  `parallelToolCallPenalty` (leading indicator, highest default weight 0.70), `failedToolCallPenalty`,
+  `emptyToolBlockPenalty`, `repetitionPenalty`, `hierarchicalCredit`, and a `scoreTrajectory` composer
+  that folds them into a single reward in [-1,1] with an inspectable per-component breakdown.
+  Pure functions, zero runtime deps, additive/opt-in — for OpenClaw agent-behavior analysis / future
+  agentic RL. No existing behavior changed.
+- **tests/rewards.mjs (new):** 29 unit tests, all passing (NaN/negative-input hardening, weight
+  overrides, reward-inversion guard, hierarchical-credit bound).
+
 ### Added — Manifest Retention Partitioning
 
 - **docker-compose.yml:** Added `morpheus-openclaw` label to the `everclaw` service for Manifest platform retention partitioning. Each customer gets their own guaranteed restore quota for soft-deleted leases (5 most-recent closed leases per customer). Defaults to a per-installation hostname-derived ID (`${HOSTNAME:-everclaw}`) so no config is required and no breakage occurs on existing deployments; override `MORPHEUS_OPENCLAW_LABEL` with a stable per-customer ID (A-Z a-z 0-9 . _ -, 1-64 chars) for explicit control.
