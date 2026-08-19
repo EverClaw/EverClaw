@@ -61,10 +61,20 @@ TPL_PROXY_PORT="${EVERCLAW_PROXY_PORT:-8083}"
 TPL_DEFAULT_MODEL="${EVERCLAW_DEFAULT_MODEL:-glm-5.2}"
 
 # Copy boot file templates if workspace is empty, substituting placeholders
+# Source priority:
+#   1. /opt/everclaw/templates/boot — OUTSIDE the persistent volume (Barney bind-mount safe)
+#   2. ${SKILLS_DIR}/templates/boot — in-image skill dir (named-volume / local Docker fallback)
+# On Barney, the empty host bind mount shadows the image's workspace/skills dir, so
+# the skill-dir path does NOT exist at runtime — only the /opt path survives.
 for template in AGENTS SOUL USER IDENTITY HEARTBEAT TOOLS; do
   target="${WORKSPACE}/${template}.md"
-  source="${SKILLS_DIR}/templates/boot/${template}.template.md"
-  if [ ! -f "$target" ] && [ -f "$source" ]; then
+  source=""
+  if [ -f "/opt/everclaw/templates/boot/${template}.template.md" ]; then
+    source="/opt/everclaw/templates/boot/${template}.template.md"
+  elif [ -f "${SKILLS_DIR}/templates/boot/${template}.template.md" ]; then
+    source="${SKILLS_DIR}/templates/boot/${template}.template.md"
+  fi
+  if [ ! -f "$target" ] && [ -n "$source" ]; then
     sed \
       -e "s|__AGENT_NAME__|${TPL_AGENT_NAME}|g" \
       -e "s|__AGENT_VIBE__|${TPL_AGENT_VIBE}|g" \
@@ -77,6 +87,20 @@ for template in AGENTS SOUL USER IDENTITY HEARTBEAT TOOLS; do
     echo "   Scaffolded: ${template}.md"
   fi
 done
+
+# ─── Skill Restore (Barney bind-mount fix) ──────────────────────────────────
+# The image bakes the EverClaw skill into the workspace at build time, but
+# Barney mounts an EMPTY persistent volume over the workspace home directory, which
+# shadows that baked-in copy (bind mounts do not copy image content).
+# If the skill is missing at runtime, restore it from /opt/everclaw/skill
+# (outside the volume). The skill is what provides templates/, scripts/
+# (security-tier.mjs, morpheus-proxy.mjs) and three-shifts/.
+if [ -d "/opt/everclaw/skill" ] && [ ! -d "${SKILLS_DIR}" ]; then
+  echo "🔧 Restoring EverClaw skill into workspace (bind-mount shadow fix)..."
+  mkdir -p "${WORKSPACE}/skills"
+  cp -a /opt/everclaw/skill "${SKILLS_DIR}"
+  echo "   Skill restored: ${SKILLS_DIR}"
+fi
 
 # Create memory directory structure
 mkdir -p "${WORKSPACE}/memory/daily"

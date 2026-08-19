@@ -259,7 +259,23 @@ COPY config/openclaw-default.json /opt/everclaw/defaults/openclaw-default.json
 RUN chown node:node /opt/everclaw/defaults/openclaw-default.json
 
 # ─── Boot File Templates ─────────────────────────────────────────────────────
-# Copy boot templates to workspace if they don't already exist (first run)
+# Boot templates live OUTSIDE the persistent volume (/opt/everclaw/templates/)
+# so they survive Barney's empty host bind mount over the workspace home dir on
+# first run (Docker bind mounts shadow image content instead of copying it,
+# unlike named volumes). The entrypoint scaffolds workspace AGENTS.md/SOUL.md
+# from these on first boot. Same pattern as config/openclaw-default.json.
+# Local Docker runs (named volume or no volume) keep working via the
+# skills/everclaw/templates/boot/ fallback path in docker-entrypoint.sh.
+
+RUN mkdir -p /opt/everclaw/templates/boot
+COPY templates/boot/*.template.md /opt/everclaw/templates/boot/
+
+# Full EverClaw skill also lives OUTSIDE the volume (/opt/everclaw/skill) so
+# Barney's empty bind mount does not hide scripts/, three-shifts/, templates/.
+# docker-entrypoint.sh restores it into the workspace on first boot when the
+# workspace copy is missing (bind mount shadows the image's baked-in copy).
+COPY --from=openclaw-builder --chown=node:node /everclaw-skill /opt/everclaw/skill
+RUN chown -R node:node /opt/everclaw/templates /opt/everclaw/skill
 
 COPY --chown=node:node scripts/docker-entrypoint.sh /app/docker-entrypoint.sh
 RUN chmod +x /app/docker-entrypoint.sh
