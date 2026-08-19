@@ -83,6 +83,7 @@ COPY --chown=node:node BRAIN.md /everclaw-skill/BRAIN.md
 COPY --chown=node:node TOOLS.md /everclaw-skill/TOOLS.md
 COPY --chown=node:node VOICE.md /everclaw-skill/VOICE.md
 COPY --chown=node:node skills /everclaw-skill/skills
+COPY --chown=node:node templates /everclaw-skill/templates
 COPY --chown=node:node package.json /everclaw-skill/package.json
 COPY --chown=node:node config /everclaw-skill/config
 
