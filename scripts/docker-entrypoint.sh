@@ -23,6 +23,12 @@ FIRST_RUN_MARKER="${OPENCLAW_HOME}/.first-run-complete"
 
 # ─── First Run: Scaffold workspace ──────────────────────────────────────────
 
+# Ensure home + workspace dirs exist BEFORE writing into them. On Manifest
+# providers (Barney) the home dir is an empty persistent bind mount, so the
+# workspace subdir is NOT baked in and must be created first — otherwise the
+# template scaffold fails with "No such file or directory" under set -e.
+mkdir -p "${OPENCLAW_HOME}" "${WORKSPACE}"
+
 OPENCLAW_VER=$(node -e "try{console.log(require('/app/package.json').version)}catch{console.log('unknown')}" 2>/dev/null)
 echo "🔧 EverClaw v${EVERCLAW_VERSION:-unknown} (OpenClaw v${OPENCLAW_VER}) starting..."
 
