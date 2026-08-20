@@ -2,8 +2,8 @@
 # staging-verify.sh — Stage 10.5 Staging Verification for EverClaw Docker Images
 #
 # Pulls a freshly built Docker image, starts a staging container with
-# production-equivalent env vars, and runs the full 16-test matrix
-# (Tier 1 smoke + Tier 2 integration + Tier 3 regression).
+# production-equivalent env vars, and runs the full 17-test matrix
+# (Tier 1 smoke + Tier 2 integration + Tier 3 regression + image-regression).
 #
 # Usage:
 #   bash scripts/staging-verify.sh <image-tag> [--keep]
@@ -13,9 +13,12 @@
 #
 # Environment:
 #   Reads secrets from macOS keychain. Requires Docker running locally.
+#   Manual-only: do NOT run this on a schedule or from a cron (Aug 2026 —
+#   it pulls ~2.7 GiB images and filled the disk; see memory/daily/2026-08-14.md).
+#   Disk guard: refuses to run when the Data volume is >= 85% full.
 #
 # Exit codes:
-#   0 — All 16 tests passed
+#   0 — All 17 tests passed
 #   1 — One or more tests failed (see output for details)
 #   2 — Setup error (image pull failed, container didn't start, etc.)
 #
@@ -37,6 +40,17 @@ MAX_STARTUP_RETRIES=6
 RESTART_WAIT=30
 MAX_RESTART_RETRIES=10
 CURL_TIMEOUT=30
+
+# ─── Disk Guard (Aug 2026 — pull/run is ~2.7 GiB; blocked when Data >= 85%) ────
+# macOS: `df /` reports the sealed read-only system snapshot. Always check the
+# real user-data volume (memory gotcha 2026-08-15).
+if command -v df >/dev/null 2>&1; then
+    DISK_USAGE=$(df -h /System/Volumes/Data 2>/dev/null | awk 'NR==2 {gsub(/%/,"",$5); print $5}')
+    if [ -n "$DISK_USAGE" ] && [ "$DISK_USAGE" -ge 85 ]; then
+        echo -e "${RED}[staging] Disk guard: Data volume at ${DISK_USAGE}% (>= 85%). Refusing to run — free space first.${NC}"
+        exit 3
+    fi
+fi
 
 # Colors
 RED='\033[0;31m'
@@ -73,6 +87,11 @@ cleanup() {
     fi
     # Remove temp env file + docker err file (fixes Grok finding #1 — secret exposure)
     rm -f "${TMP_ENV_FILE:-/dev/null}" "${DOCKER_RUN_ERR:-/dev/null}"
+    # Prune pulled image layers after tests (disk guard — see memory/daily/2026-08-14.md)
+    if [ "$KEEP_CONTAINER" != "true" ]; then
+        docker image rm "$IMAGE_TAG" >/dev/null 2>&1 || true
+        docker image prune -f >/dev/null 2>&1 || true
+    fi
     log "Results saved to ${LOG_FILE}"
     exit "$exit_code"
 }
@@ -656,6 +675,41 @@ if [ -z "$MODALITY_ISSUES" ]; then
     pass "16. Modality check" "all key files present (image version: ${IMAGE_VERSION})"
 else
     fail "16. Modality check" "${MODALITY_ISSUES}"
+fi
+
+# Test 17: Image-regression — bind-mount fix paths present (2026-08-19 Tool Calling Rule work)
+# Asserts the files that fix the Barney empty bind-mount shadowing exist in the image:
+#   /opt/everclaw/templates/boot/*.template.md  (AGENTS/SOUL templates w/ Tool Calling Rule)
+#   /opt/everclaw/skill/templates/boot/         (skill templates, second copy)
+#   /opt/everclaw/skill/scripts/morpheus-proxy.mjs, security-tier.mjs, three-shifts/
+# Without these, containers on fresh empty bind mounts boot WITHOUT the rule (data/session leak fix).
+IMAGE_FIX_ISSUES=""
+check_fix_path() {
+    local path="$1"
+    local label="$2"
+    if ! docker exec "$STAGING_NAME" sh -c "test -e \"$path\"" 2>/dev/null; then
+        IMAGE_FIX_ISSUES="${IMAGE_FIX_ISSUES}${label} missing at ${path}; "
+    fi
+}
+
+check_fix_path "/opt/everclaw/templates/boot/AGENTS.template.md" "AGENTS boot template"
+check_fix_path "/opt/everclaw/templates/boot/SOUL.template.md" "SOUL boot template"
+check_fix_path "/opt/everclaw/skill/scripts/morpheus-proxy.mjs" "morpheus-proxy"
+check_fix_path "/opt/everclaw/skill/scripts/security-tier.mjs" "security-tier"
+check_fix_path "/opt/everclaw/skill/three-shifts/" "three-shifts templates"
+
+# Rule content check — Tool Calling Rule must be inside the template
+RULE_MARKER="Tool Calling Rule"
+if docker exec "$STAGING_NAME" sh -c "grep -q \"$RULE_MARKER\" /opt/everclaw/templates/boot/AGENTS.template.md" 2>/dev/null; then
+    : # rule present
+else
+    IMAGE_FIX_ISSUES="${IMAGE_FIX_ISSUES}Tool Calling Rule missing in AGENTS.template.md; "
+fi
+
+if [ -z "$IMAGE_FIX_ISSUES" ]; then
+    pass "17. Image regression (bind-mount fix)" "/opt/everclaw/templates/boot + skill paths + Tool Calling Rule present"
+else
+    fail "17. Image regression (bind-mount fix)" "${IMAGE_FIX_ISSUES}"
 fi
 
 # ─── Summary ──────────────────────────────────────────────────────────────────
