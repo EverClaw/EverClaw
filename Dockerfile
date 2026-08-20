@@ -58,7 +58,7 @@
 # this promotion; update.checkOnStart=false suppresses the update banner in openclaw-default.json.
 ARG OPENCLAW_VERSION=v2026.7.1-2
 
-FROM node:26-bookworm AS openclaw-builder
+FROM node:22-bookworm AS openclaw-builder
 
 ARG OPENCLAW_VERSION
 
@@ -112,7 +112,7 @@ RUN cp -r ./src/agents/templates /tmp/openclaw-templates 2>/dev/null || true && 
 
 # Auth proxy for Privy JWT authentication
 # Built at image time — bundles Privy SDK + React (no runtime CDN dependency)
-FROM node:26-bookworm-slim AS auth-proxy-builder
+FROM node:22-bookworm-slim AS auth-proxy-builder
 
 WORKDIR /auth-proxy
 
@@ -139,7 +139,7 @@ RUN rm -rf node_modules && \
 
 # ─── Stage 2: Production Image ───────────────────────────────────────────────
 
-FROM node:26-bookworm-slim AS production
+FROM node:22-bookworm-slim AS production
 
 # Install runtime dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
