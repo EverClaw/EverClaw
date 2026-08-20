@@ -1,0 +1,9 @@
+{
+  "name": "Family Office Claw",
+  "slug": "familyofficeclaw",
+  "domain": "familyofficeclaw.com",
+  "description": "AI agent for family office operations",
+  "remote": "https://github.com/profbernardoj/familyofficeclaw.com.git",
+  "defaultModel": "glm-5",
+  "persona": "Family office AI assistant"
+}

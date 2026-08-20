@@ -1,0 +1,9 @@
+{
+  "name": "Windows Claw",
+  "slug": "windowsclaw",
+  "domain": "windowsclaw.org",
+  "description": "AI agent for Windows systems",
+  "remote": "https://github.com/profbernardoj/windowsclaw.org.git",
+  "defaultModel": "glm-5",
+  "persona": "Windows-focused AI assistant"
+}

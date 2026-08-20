@@ -13,15 +13,22 @@
 
 services:
   everclaw:
-    image: ghcr.io/everclaw/everclaw:2026.6.18.1803
+    image: ghcr.io/everclaw/everclaw:2026.8.12.1835-staging
     build:
       context: .
       dockerfile: Dockerfile
       args:
-        EVERCLAW_VERSION: "2026.6.18.1803"   # EverClaw version — never uses 'v' prefix (see Dockerfile policy)
-        OPENCLAW_VERSION: "v2026.5.27"       # OpenClaw version — always uses 'v' prefix (see Dockerfile policy)
+        EVERCLAW_VERSION: "2026.8.12.1835"   # EverClaw version — never uses 'v' prefix (see Dockerfile policy)
+        OPENCLAW_VERSION: "v2026.7.1-2"       # OpenClaw version — always uses 'v' prefix (see Dockerfile policy)
     container_name: everclaw
     restart: unless-stopped
+    # Manifest retention partitioning — per-customer restore quota isolation.
+    # Ensures each customer gets their own guaranteed restore quota for soft-deleted leases.
+    # Defaults to a per-installation hostname-derived ID for unique partitioning with no config needed.
+    # Override MORPHEUS_OPENCLAW_LABEL with a stable per-customer ID (A-Z a-z 0-9 . _ - only, 1-64 chars).
+    # See: https://docs.manifest.cloud/retention-partitioning
+    labels:
+      morpheus-openclaw: "${MORPHEUS_OPENCLAW_LABEL:-${HOSTNAME:-everclaw}}"
     ports:
       # Default: accessible from all interfaces.
       # For local-only use, bind to localhost instead:

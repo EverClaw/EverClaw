@@ -1,0 +1,9 @@
+{
+  "name": "Home Claw",
+  "slug": "homeclaw",
+  "domain": "homeclaw.org",
+  "description": "AI agent for smart home management",
+  "remote": "https://github.com/profbernardoj/homeclaw.org.git",
+  "defaultModel": "glm-5",
+  "persona": "Smart home AI assistant"
+}

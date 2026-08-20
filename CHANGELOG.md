@@ -2,6 +2,92 @@
 
 All notable changes to EverClaw are documented here.
 
+## [Unreleased] - 2026-07-26
+
+### Added — KAT-Coder RL Reward Patterns library (OSSAI-016)
+
+- **scripts/lib/rewards.mjs (new):** Deterministic reward-signal reference library from the
+  Kwaipilot KAT-Coder-V2.5-Dev RL post-mortem (69.4% SWE-bench Verified). Implements the four
+  penalty signals + hierarchical credit that prevented agentic collapse under binary rewards:
+  `parallelToolCallPenalty` (leading indicator, highest default weight 0.70), `failedToolCallPenalty`,
+  `emptyToolBlockPenalty`, `repetitionPenalty`, `hierarchicalCredit`, and a `scoreTrajectory` composer
+  that folds them into a single reward in [-1,1] with an inspectable per-component breakdown.
+  Pure functions, zero runtime deps, additive/opt-in — for OpenClaw agent-behavior analysis / future
+  agentic RL. No existing behavior changed.
+- **tests/rewards.mjs (new):** 29 unit tests, all passing (NaN/negative-input hardening, weight
+  overrides, reward-inversion guard, hierarchical-credit bound).
+
+### Added — Manifest Retention Partitioning
+
+- **docker-compose.yml:** Added `morpheus-openclaw` label to the `everclaw` service for Manifest platform retention partitioning. Each customer gets their own guaranteed restore quota for soft-deleted leases (5 most-recent closed leases per customer). Defaults to a per-installation hostname-derived ID (`${HOSTNAME:-everclaw}`) so no config is required and no breakage occurs on existing deployments; override `MORPHEUS_OPENCLAW_LABEL` with a stable per-customer ID (A-Z a-z 0-9 . _ -, 1-64 chars) for explicit control.
+
+### Fixed
+
+- **docker-compose.yml:** Fixed invalid service name `everclaw:2026.7.11.0248` → `everclaw` (colon is invalid in YAML/docker-compose service names, introduced in v2026.7.11.0248).
+
+## [Unreleased] - 2026-07-17
+
+### Added — Full Container Capability Upgrade
+
+- **Dockerfile:** Merged all packages from `Dockerfile.optimized` into the production Dockerfile. InstallOpenClaw.xyz containers now ship with a complete toolset:
+  - **python3 + pip** — Python execution for agents (allowlisted in security tier)
+  - **zip + unzip** — Archive operations (allowlisted in security tier)
+  - **ffmpeg** — Audio/video processing (voice notes, video frames skill)
+  - **gnupg** — GPG key management (required for Adoptium Java repo)
+  - **Java 21 (Temurin JRE)** — Runtime for signal-cli
+  - **signal-cli v0.14.5** — Signal messaging (SHA256 checksum verified)
+  - **GitHub CLI (gh)** — Git platform operations (allowlisted in security tier)
+  - **Brave Browser** — Headless browser automation (OpenClaw browser tool)
+  - **openai-whisper** — Speech-to-text (CPU-only torch, model downloads on demand)
+- **scripts/docker-entrypoint.sh:** Default security tier changed from `recommended` to `low`. All 54 exec-allowlisted binaries (ls, cat, grep, node, python3, git, curl, etc.) now run without approval prompts. Money operations remain gated at the application layer (everclaw-wallet.mjs) regardless of tier.
+
+### Changed
+
+- **Dockerfile:** `EVERCLAW_SECURITY_TIER` default updated from `recommended` to `low` with warning comments.
+- **scripts/docker-entrypoint.sh:** `SECURITY_TIER` default updated from `recommended` to `low` with explanatory comments.
+
+## [2026.7.11.0248] - 2026-07-11
+
+### Changed — GLM-5.2 Default + Bootstrap Reset Hardening
+
+- **scripts/docker-entrypoint.sh:** Updated fallback default model from `glm-5.1` to `glm-5.2`. This aligns the Docker image default with the Free tier configuration in `provision-buffer` (`EVERCLAW_DEFAULT_MODEL=glm-5.2`). The env var override still takes precedence; this only affects containers without the env var set.
+- **scripts/docker-entrypoint.sh:** Hardened bootstrap session reset from a one-shot `sleep 20` to a polling loop (3 iterations × 20s = 60s). Fixes race condition where Morpheus P2P inference failures that arrive after the 20s window left "assistant turn failed" errors visible to users.
+  - Added `OPENCLAW_OWNER_PRIVY_ID` guard: only runs on unclaimed buffer containers (`buffer-unassigned`), preventing accidental session wipes during Manifest node migrations on claimed containers.
+  - Added `command -v` guards for `jq` and `node` with diagnostic output instead of silent failure.
+  - Fixed JSON injection risk: session keys now passed via `jq -nc --arg` instead of string interpolation.
+  - Added `|| true` pipeline guard for `set -e` compatibility.
+
+## [2026.6.26.2131] - 2026-06-26
+
+### Fixed — Reset Dashboard Session (not main)
+
+- **scripts/docker-entrypoint.sh:** Fixed the bootstrap session reset to target the correct session key. The Control UI uses `agent:main:dashboard:<uuid>` session keys, not `agent:main:main`. The previous fix reset `main` which had no effect on the UI. Now the script lists all sessions, finds dashboard session keys, and resets each one.
+
+## [2026.6.26.2008] - 2026-06-26
+
+### Fixed — Simplified Bootstrap Session Reset
+
+- **scripts/docker-entrypoint.sh:** Simplified the Bootstrap Session Reset from 73 lines of conditional query+grep+reset logic to a straightforward unconditional reset. The previous approach silently failed when the `sessions.get` query didn't find the error string (e.g., auth issues, wrong port, timeout), leaving the broken session visible to users. The new approach: wait 20s after gateway health, then unconditionally call `sessions.reset` with `reason:"new"`. Buffer pool containers sit warm for minutes before being claimed, so there is no user content to destroy. Removed the `sessions.get` query, grep conditional, named constants, and if/elif/else branching.
+
+## [2026.6.26.0606] - 2026-06-26
+
+### Fixed — Bootstrap Session Reset for InstallOpenClaw.xyz Cold Start
+
+- **scripts/docker-entrypoint.sh:** Added Bootstrap Session Reset block. After the gateway becomes healthy, a background process waits 20s for the initial bootstrap agent turn to complete, queries `sessions.get` to check if the main session has the "assistant turn failed before producing content" error, and if detected, calls `sessions.reset` with `reason:"new"` to clear the failed session. This gives users a fresh, clean session when they first open the Control UI instead of seeing a broken error message. The reset is conditional — if the bootstrap succeeded or the user already started chatting, the reset is skipped. Handles both legacy token auth (port 18789) and Privy trusted-proxy mode (port 18790).
+
+## [2026.6.23.1642] - 2026-06-23
+
+### Added — GLM-5.2 for Free Tier
+
+- **config/openclaw-default.json:** Added `glm-5.2` model to both `mor-gateway` and `morpheus-local` providers with `reasoning: false` and `streaming: true`. Free tier users can now select GLM-5.2 as an alternative to DeepSeek V4 Flash. Default model remains `deepseek-v4-flash` (set by `provision-buffer` `EVERCLAW_DEFAULT_MODEL` env var).
+- **supabase/functions/cig-inference/index.ts:** Added `glm-5.2` (and all prefixed variants) to `RESERVE_ESTIMATES_USD` with $0.005 per-request reserve estimate (same tier as GLM-5.1).
+- **supabase/migrations/20260623_add_glm52_free_tier.sql:** Updated `check_and_charge_usage()` free tier allowlist to include `glm-5.2` and all prefix variants (`morpheus/glm-5.2`, `mor-gateway/glm-5.2`, `morpheus-local/glm-5.2`). Added `insert_usage_log()` RPC function for idempotent usage log writes. Added `model_prices` entries for all four name variants.
+
+### Fixed — "assistant turn failed" Regression
+
+- **supabase/migrations/20260623_add_glm52_free_tier.sql:** Fixed critical parameter name typo in `check_and_charge_usage()` — `v_cost_usd` was used in 5 places instead of `p_cost_usd`, causing SQL error `column "v_cost_usd" does not exist` on ALL inference calls. The function body has been restored to the proven June 22 version with only the GLM-5.2 allowlist addition.
+- **supabase/functions/cig-inference/index.ts:** Added `daily_limit_exceeded` to the error reason mapping (maps to 429 `daily_limit_or_credits_exhausted`). Previously only `insufficient_credits` was mapped, causing `daily_limit_exceeded` to fall through as a raw 403.
+
 ## [2026.6.18.2357] - 2026-06-18
 
 ### Bug Fixes — Revert OpenClaw Pin + CIG Model Prefix

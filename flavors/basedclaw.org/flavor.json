@@ -1,0 +1,9 @@
+{
+  "name": "Based Claw",
+  "slug": "basedclaw",
+  "domain": "basedclaw.org",
+  "description": "AI agent for Based AI distributed inference",
+  "remote": "https://github.com/profbernardoj/basedclaw.org.git",
+  "defaultModel": "glm-5",
+  "persona": "Based AI inference assistant"
+}

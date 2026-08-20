@@ -1,0 +1,9 @@
+{
+  "name": "Friend Claw",
+  "slug": "friendclaw",
+  "domain": "friendclaw.xyz",
+  "description": "AI companion and social assistant",
+  "remote": "https://github.com/profbernardoj/friendclaw.xyz.git",
+  "defaultModel": "glm-5",
+  "persona": "Social AI companion"
+}

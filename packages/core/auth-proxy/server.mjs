@@ -104,6 +104,7 @@ const CIG_CONFIG = {
 const CIG_ENABLED = !!(CIG_CONFIG.mintUrl && CIG_CONFIG.inferenceUrl && CIG_CONFIG.bindingSecret);
 // Optional suffix restriction for auto-detected FQDNs (e.g. ".manifest0.net")
 const CIG_ALLOWED_FQDN_SUFFIX = process.env.CIG_ALLOWED_FQDN_SUFFIX || '';
+
 const CIG_TOKEN_TTL_MS = 10 * 60 * 1000;    // 10 minutes
 const CIG_TOKEN_REFRESH_MS = 60_000;         // Refresh 60s before expiry
 const CIG_FETCH_TIMEOUT_MS = 10_000;         // 10s timeout for CIG HTTP calls
@@ -609,16 +610,23 @@ async function mintCigToken() {
     throw err;
   }
 
+  // If FQDN still not detected after waiting, try minting with binding_secret
+  // only (no fqdn). The mint-cig-token function can look up the deployment by
+  // binding_secret and derive the FQDN from the agent_url in the DB.
+  // This is the ultimate fallback for cold-start scenarios.
+  const mintBody = { binding_secret: CIG_CONFIG.bindingSecret };
+  if (fqdn) {
+    mintBody.fqdn = fqdn;
+  }
+  // If no fqdn, mint-cig-token will look up by binding_secret alone.
+
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), CIG_FETCH_TIMEOUT_MS);
   try {
     const resp = await fetch(CIG_CONFIG.mintUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        fqdn,
-        binding_secret: CIG_CONFIG.bindingSecret,
-      }),
+      body: JSON.stringify(mintBody),
       signal: controller.signal,
     });
 
@@ -635,7 +643,19 @@ async function mintCigToken() {
       expiresAt: Date.now() + CIG_TOKEN_TTL_MS,
     };
 
-    console.log(`[cig-proxy] Minted CIG token for ${fqdn}`);
+    // If FQDN was not known before the mint, update it from the mint response.
+    // The mint-cig-token function can look up the FQDN from the DB by binding_secret.
+    // Defensive: only update if data.fqdn is a non-empty string.
+    const resolvedFqdn = (typeof data.fqdn === 'string' && data.fqdn.length > 0)
+      ? data.fqdn
+      : fqdn;
+    if (resolvedFqdn && !CIG_CONFIG.fqdnLocked) {
+      CIG_CONFIG.containerFqdn = resolvedFqdn;
+      CIG_CONFIG.fqdnLocked = true;
+      console.log(`[cig-proxy] FQDN set via mint: ${resolvedFqdn}`);
+    }
+
+    console.log(`[cig-proxy] Minted CIG token for ${resolvedFqdn || CIG_CONFIG.containerFqdn}`);
     return data.token;
   } finally {
     clearTimeout(timeoutId);

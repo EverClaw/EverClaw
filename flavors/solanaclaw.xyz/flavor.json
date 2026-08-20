@@ -1,0 +1,9 @@
+{
+  "name": "Solana Claw",
+  "slug": "solanaclaw",
+  "domain": "solanaclaw.xyz",
+  "description": "AI agent for Solana ecosystem",
+  "remote": "https://github.com/profbernardoj/solanaclaw.xyz.git",
+  "defaultModel": "glm-5",
+  "persona": "Solana-focused AI assistant"
+}

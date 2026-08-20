@@ -1,0 +1,9 @@
+{
+  "name": "MyAI Capital",
+  "slug": "myaicapital",
+  "domain": "myai.capital",
+  "description": "AI agent for capital management",
+  "remote": "https://github.com/profbernardoj/myai.capital.git",
+  "defaultModel": "glm-5",
+  "persona": "Capital management AI assistant"
+}

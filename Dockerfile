@@ -20,7 +20,7 @@
 #   docker build -t ghcr.io/everclaw/everclaw:latest .
 #
 # Build with specific OpenClaw version:
-#   docker build --build-arg OPENCLAW_VERSION=v2026.5.27 -t ghcr.io/everclaw/everclaw:latest .
+#   docker build --build-arg OPENCLAW_VERSION=v2026.7.1-2 -t ghcr.io/everclaw/everclaw:latest .
 #
 # Run:
 #   docker run -d \
@@ -44,7 +44,9 @@
 #   TZ                        — Timezone for the agent (default: UTC, e.g. America/New_York)
 #   EVERCLAW_DEFAULT_MODEL    — Default AI model (default: glm-5)
 #   EVERCLAW_AUTH_TOKEN       — Legacy alias for proxy auth (default: morpheus-local)
-#   EVERCLAW_SECURITY_TIER    — Security tier: low|recommended|maximum (default: recommended)
+#   EVERCLAW_SECURITY_TIER    — Security tier: low|recommended|maximum (default: low)
+#   !!! WARNING: "low" disables exec approval prompts for ALL allowlisted binaries !!!
+#   !!! Money operations remain gated at app layer (everclaw-wallet.mjs) regardless !!!
 #   WALLET_PRIVATE_KEY        — For local P2P staking (optional, use secrets in production)
 #   OPENCLAW_ENABLE_DEVICE_AUTH=true — Re-enable device auth (default: disabled for containers)
 
@@ -81,6 +83,7 @@ COPY --chown=node:node BRAIN.md /everclaw-skill/BRAIN.md
 COPY --chown=node:node TOOLS.md /everclaw-skill/TOOLS.md
 COPY --chown=node:node VOICE.md /everclaw-skill/VOICE.md
 COPY --chown=node:node skills /everclaw-skill/skills
+COPY --chown=node:node templates /everclaw-skill/templates
 COPY --chown=node:node package.json /everclaw-skill/package.json
 COPY --chown=node:node config /everclaw-skill/config
 
@@ -146,8 +149,61 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     jq \
     age \
     zstd \
+    python3 \
+    python3-pip \
+    zip \
+    unzip \
+    ffmpeg \
+    gnupg \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
+
+# ─── Install Java 21 (Temurin JRE) for signal-cli ────────────────────────────
+RUN curl -fsSL https://packages.adoptium.net/artifactory/api/gpg/key/public | gpg --dearmor -o /usr/share/keyrings/adoptium.gpg \
+    && echo "deb [signed-by=/usr/share/keyrings/adoptium.gpg] https://packages.adoptium.net/artifactory/deb bookworm main" | tee /etc/apt/sources.list.d/adoptium.list > /dev/null \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends temurin-21-jre \
+    && rm -rf /var/lib/apt/lists/*
+
+# ─── Install signal-cli (with SHA256 checksum verification) ────────────────
+ARG SIGNAL_CLI_VERSION=0.14.5
+RUN curl -sL -o /tmp/signal-cli.tar.gz \
+    "https://github.com/AsamK/signal-cli/releases/download/v${SIGNAL_CLI_VERSION}/signal-cli-${SIGNAL_CLI_VERSION}.tar.gz" \
+    && echo "62d38ebfef3988d78f437e7328183b75ee549d111382e66c1af70d3ebd3cd7a7  /tmp/signal-cli.tar.gz" | sha256sum -c - \
+    && tar -xzf /tmp/signal-cli.tar.gz -C /opt \
+    && ln -sf /opt/signal-cli-${SIGNAL_CLI_VERSION}/bin/signal-cli /usr/local/bin/signal-cli \
+    && rm /tmp/signal-cli.tar.gz
+
+# ─── Install GitHub CLI ───────────────────────────────────────────────────────
+RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends gh \
+    && rm -rf /var/lib/apt/lists/*
+
+# ─── Install Brave Browser (headless browser automation) ─────────────────────
+# NOTE: Brave is a full Chromium-based browser (~400MB). It is installed for
+# OpenClaw's browser tool (headless automation). The attack surface includes
+# the Chromium engine + sandbox. This is acceptable for InstallOpenClaw.xyz
+# containers where the user owns and controls the agent.
+RUN curl -fsSLo /usr/share/keyrings/brave-browser-archive-keyring.gpg \
+    https://brave-browser-apt-release.s3.brave.com/brave-browser-archive-keyring.gpg \
+    && echo "deb [signed-by=/usr/share/keyrings/brave-browser-archive-keyring.gpg] https://brave-browser-apt-release.s3.brave.com/ stable main" | tee /etc/apt/sources.list.d/brave-browser-release.list > /dev/null \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends brave-browser \
+    && rm -rf /var/lib/apt/lists/*
+
+# Brave/Chromium requires --no-sandbox in Docker containers (no CAP_SYS_ADMIN).
+# These env vars are picked up by OpenClaw's browser tool when launching Brave.
+ENV BRAVE_PATH="/usr/bin/brave-browser" \
+    BRAVE_FLAGS="--headless=new --no-sandbox --disable-dev-shm-usage --disable-gpu"
+
+# ─── Install Whisper (speech-to-text, CPU-only torch, model downloads on demand)
+RUN pip3 install --no-cache-dir --break-system-packages \
+    torch --index-url https://download.pytorch.org/whl/cpu \
+    && pip3 install --no-cache-dir --break-system-packages \
+    --extra-index-url https://download.pytorch.org/whl/cpu \
+    openai-whisper
 
 # Create all persistent directories (for Barney + local Docker)
 RUN mkdir -p /home/node/.openclaw/workspace/skills/everclaw \
@@ -204,7 +260,23 @@ COPY config/openclaw-default.json /opt/everclaw/defaults/openclaw-default.json
 RUN chown node:node /opt/everclaw/defaults/openclaw-default.json
 
 # ─── Boot File Templates ─────────────────────────────────────────────────────
-# Copy boot templates to workspace if they don't already exist (first run)
+# Boot templates live OUTSIDE the persistent volume (/opt/everclaw/templates/)
+# so they survive Barney's empty host bind mount over the workspace home dir on
+# first run (Docker bind mounts shadow image content instead of copying it,
+# unlike named volumes). The entrypoint scaffolds workspace AGENTS.md/SOUL.md
+# from these on first boot. Same pattern as config/openclaw-default.json.
+# Local Docker runs (named volume or no volume) keep working via the
+# skills/everclaw/templates/boot/ fallback path in docker-entrypoint.sh.
+
+RUN mkdir -p /opt/everclaw/templates/boot
+COPY templates/boot/*.template.md /opt/everclaw/templates/boot/
+
+# Full EverClaw skill also lives OUTSIDE the volume (/opt/everclaw/skill) so
+# Barney's empty bind mount does not hide scripts/, three-shifts/, templates/.
+# docker-entrypoint.sh restores it into the workspace on first boot when the
+# workspace copy is missing (bind mount shadows the image's baked-in copy).
+COPY --from=openclaw-builder --chown=node:node /everclaw-skill /opt/everclaw/skill
+RUN chown -R node:node /opt/everclaw/templates /opt/everclaw/skill
 
 COPY --chown=node:node scripts/docker-entrypoint.sh /app/docker-entrypoint.sh
 RUN chmod +x /app/docker-entrypoint.sh

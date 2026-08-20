@@ -1,4 +1,4 @@
-<!-- template-version: 2026.4.8 -->
+<!-- template-version: 2026.8.19 -->
 # AGENTS.md - Your Workspace
 
 This folder is home. Treat it that way.
@@ -146,6 +146,8 @@ On platforms that support reactions (Discord, Slack), use emoji reactions natura
 ## Tools
 
 Skills provide your tools. When you need one, check its `SKILL.md`. Keep local notes (camera names, SSH details, voice preferences) in `TOOLS.md`.
+
+**Tool Calling Rule.** Never output DSML, XML, or textual tool-call markup; always use native structured tool calling.
 
 <!-- 🎭 If you have TTS capabilities (e.g. ElevenLabs, sag), use voice for stories
      and summaries! More engaging than walls of text. -->

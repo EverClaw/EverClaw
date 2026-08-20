@@ -1,0 +1,9 @@
+{
+  "name": "Email Claw",
+  "slug": "emailclaw",
+  "domain": "emailclaw.org",
+  "description": "AI agent for email management",
+  "remote": "https://github.com/profbernardoj/emailclaw.org.git",
+  "defaultModel": "glm-5",
+  "persona": "Email management AI assistant"
+}

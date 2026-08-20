@@ -1,0 +1,10 @@
+{
+  "name": "Buddy Bots",
+  "slug": "buddybots",
+  "domain": "buddybots.org",
+  "description": "Multi-agent Buddy Bot provisioning, coordination, and management",
+  "remote": "https://github.com/profbernardoj/buddybots.org.git",
+  "defaultModel": "glm-5",
+  "persona": "Buddy Bot coordinator and provisioner",
+  "extraScripts": true
+}

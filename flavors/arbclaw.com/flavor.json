@@ -1,0 +1,9 @@
+{
+  "name": "Arb Claw",
+  "slug": "arbclaw",
+  "domain": "arbclaw.com",
+  "description": "AI agent for Arbitrum ecosystem",
+  "remote": "https://github.com/profbernardoj/arbclaw.com.git",
+  "defaultModel": "glm-5",
+  "persona": "Arbitrum-focused AI assistant"
+}

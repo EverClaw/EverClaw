@@ -1,0 +1,9 @@
+{
+  "name": "Grok Claw",
+  "slug": "grokclaw",
+  "domain": "grokclaw.xyz",
+  "description": "AI agent powered by Grok models",
+  "remote": "https://github.com/profbernardoj/grokclaw.xyz.git",
+  "defaultModel": "glm-5",
+  "persona": "Grok-focused AI assistant"
+}

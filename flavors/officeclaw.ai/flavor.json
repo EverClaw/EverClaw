@@ -1,0 +1,9 @@
+{
+  "name": "Office Claw AI",
+  "slug": "officeclaw-ai",
+  "domain": "officeclaw.ai",
+  "description": "AI agent for office productivity",
+  "remote": "https://github.com/profbernardoj/officeclaw.ai.git",
+  "defaultModel": "glm-5",
+  "persona": "Office productivity AI assistant"
+}
