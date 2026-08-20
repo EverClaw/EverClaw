@@ -58,7 +58,7 @@
 # this promotion; update.checkOnStart=false suppresses the update banner in openclaw-default.json.
 ARG OPENCLAW_VERSION=v2026.7.1-2
 
-FROM node:22-bookworm AS openclaw-builder
+FROM node:26-bookworm AS openclaw-builder
 
 ARG OPENCLAW_VERSION
 
@@ -83,6 +83,7 @@ COPY --chown=node:node BRAIN.md /everclaw-skill/BRAIN.md
 COPY --chown=node:node TOOLS.md /everclaw-skill/TOOLS.md
 COPY --chown=node:node VOICE.md /everclaw-skill/VOICE.md
 COPY --chown=node:node skills /everclaw-skill/skills
+COPY --chown=node:node templates /everclaw-skill/templates
 COPY --chown=node:node package.json /everclaw-skill/package.json
 COPY --chown=node:node config /everclaw-skill/config
 
@@ -111,7 +112,7 @@ RUN cp -r ./src/agents/templates /tmp/openclaw-templates 2>/dev/null || true && 
 
 # Auth proxy for Privy JWT authentication
 # Built at image time — bundles Privy SDK + React (no runtime CDN dependency)
-FROM node:22-bookworm-slim AS auth-proxy-builder
+FROM node:26-bookworm-slim AS auth-proxy-builder
 
 WORKDIR /auth-proxy
 
@@ -121,6 +122,7 @@ COPY packages/core/auth-proxy/server.mjs ./
 COPY packages/core/auth-proxy/login.html ./
 COPY packages/core/auth-proxy/login-app.jsx ./
 COPY packages/core/auth-proxy/build-login.mjs ./
+COPY packages/core/auth-proxy/assets/ ./assets/
 
 # Install ALL dependencies (including devDependencies for build step)
 # --ignore-scripts skips native addon compilation (utf-8-validate, bufferutil)
@@ -137,7 +139,7 @@ RUN rm -rf node_modules && \
 
 # ─── Stage 2: Production Image ───────────────────────────────────────────────
 
-FROM node:22-bookworm-slim AS production
+FROM node:26-bookworm-slim AS production
 
 # Install runtime dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -258,7 +260,23 @@ COPY config/openclaw-default.json /opt/everclaw/defaults/openclaw-default.json
 RUN chown node:node /opt/everclaw/defaults/openclaw-default.json
 
 # ─── Boot File Templates ─────────────────────────────────────────────────────
-# Copy boot templates to workspace if they don't already exist (first run)
+# Boot templates live OUTSIDE the persistent volume (/opt/everclaw/templates/)
+# so they survive Barney's empty host bind mount over the workspace home dir on
+# first run (Docker bind mounts shadow image content instead of copying it,
+# unlike named volumes). The entrypoint scaffolds workspace AGENTS.md/SOUL.md
+# from these on first boot. Same pattern as config/openclaw-default.json.
+# Local Docker runs (named volume or no volume) keep working via the
+# skills/everclaw/templates/boot/ fallback path in docker-entrypoint.sh.
+
+RUN mkdir -p /opt/everclaw/templates/boot
+COPY templates/boot/*.template.md /opt/everclaw/templates/boot/
+
+# Full EverClaw skill also lives OUTSIDE the volume (/opt/everclaw/skill) so
+# Barney's empty bind mount does not hide scripts/, three-shifts/, templates/.
+# docker-entrypoint.sh restores it into the workspace on first boot when the
+# workspace copy is missing (bind mount shadows the image's baked-in copy).
+COPY --from=openclaw-builder --chown=node:node /everclaw-skill /opt/everclaw/skill
+RUN chown -R node:node /opt/everclaw/templates /opt/everclaw/skill
 
 COPY --chown=node:node scripts/docker-entrypoint.sh /app/docker-entrypoint.sh
 RUN chmod +x /app/docker-entrypoint.sh
@@ -298,7 +316,7 @@ RUN FDIR="/home/node/.openclaw/workspace/skills/everclaw/flavors/${FLAVOR}"; \
 
 # Note: Prior release left this at 2026.5.20.1645 (desynchronized from package.json 2026.5.24.0400).
 # Re-aligned with release version as of v2026.5.28.1854.
-ARG EVERCLAW_VERSION=2026.8.12.2040
+ARG EVERCLAW_VERSION=2026.8.20.0917
 ENV EVERCLAW_VERSION=${EVERCLAW_VERSION}
 ENV NODE_ENV=production
 ENV EVERCLAW_PROXY_PORT=8083

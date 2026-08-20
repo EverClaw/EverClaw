@@ -105,16 +105,11 @@ const CIG_ENABLED = !!(CIG_CONFIG.mintUrl && CIG_CONFIG.inferenceUrl && CIG_CONF
 // Optional suffix restriction for auto-detected FQDNs (e.g. ".manifest0.net")
 const CIG_ALLOWED_FQDN_SUFFIX = process.env.CIG_ALLOWED_FQDN_SUFFIX || '';
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
 const CIG_TOKEN_TTL_MS = 10 * 60 * 1000;    // 10 minutes
 const CIG_TOKEN_REFRESH_MS = 60_000;         // Refresh 60s before expiry
 const CIG_FETCH_TIMEOUT_MS = 10_000;         // 10s timeout for CIG HTTP calls
 const CIG_MAX_BODY_BYTES = 1024 * 1024;      // 1 MB max inference request body
 const CIG_INFERENCE_TIMEOUT_MS = 5 * 60 * 1000; // 5 min timeout for inference (streaming)
-const CIG_FQDN_WAIT_MS = 15_000;          // Max time to wait for FQDN detection before giving up
-const CIG_FQDN_POLL_MS = 500;             // Poll interval for FQDN detection
 let cigTokenCache = { token: '', expiresAt: 0 };
 
 // ─── Rate Limiter (in-memory, per-IP) ────────────────────────────────────────
@@ -601,19 +596,18 @@ async function mintCigToken() {
   // FQDN is required for per-container binding.
   // Set via CIG_CONTAINER_FQDN / CONTAINER_FQDN env var, or auto-detected
   // from external requests in handleRequest() (see FQDN auto-detection block).
-  //
-  // If FQDN is not yet detected, poll for up to CIG_FQDN_WAIT_MS before giving up.
-  // This handles the cold-start race condition where OpenClaw fires its initial
-  // assistant turn before any browser request has triggered FQDN auto-detection.
-  // A concurrent browser request (or a slower startup) may set the FQDN during
-  // this window, allowing the retry to succeed.
-  let fqdn = CIG_CONFIG.containerFqdn;
+  const fqdn = CIG_CONFIG.containerFqdn;
   if (!fqdn) {
-    const waitStart = Date.now();
-    while (!fqdn && Date.now() - waitStart < CIG_FQDN_WAIT_MS) {
-      await sleep(CIG_FQDN_POLL_MS);
-      fqdn = CIG_CONFIG.containerFqdn;
-    }
+    // FQDN not yet auto-detected — skip CIG for this request.
+    // Subsequent requests will have the FQDN after auto-detection.
+    console.warn('[cig] Cannot mint token: FQDN not yet detected (will auto-detect from Host header)');
+    const err = new Error(
+      'Container FQDN not available. Set CIG_CONTAINER_FQDN env var, ' +
+      'or ensure the user loads the chat UI before the first inference call '
+      + '(the FQDN is auto-detected from the first external HTTP request).'
+    );
+    err.code = 'fqdn_not_detected';
+    throw err;
   }
 
   // If FQDN still not detected after waiting, try minting with binding_secret
@@ -697,11 +691,11 @@ async function handleCigProxy(req, res, url) {
     try {
       cigToken = await mintCigToken();
     } catch (mintErr) {
-      // FQDN not detected even after the internal retry loop in mintCigToken.
-      // This means no browser request has reached the container yet.
-      // Return 503 with Retry-After so OpenClaw retries instead of failing.
-      if (mintErr.code === 'fqdn_not_detected' || mintErr.message.includes('FQDN not')) {
-        console.warn('[cig-proxy] Returning 503 (FQDN not detected after wait) — retry needed');
+      // FQDN not yet detected — return 503 Retry-After so OpenClaw retries
+      // instead of treating it as a hard failure ("assistant turn failed").
+      // The FQDN will be auto-detected from the first browser request's Host header.
+      if (mintErr.code === 'fqdn_not_detected' || mintErr.message.includes('FQDN not yet detected')) {
+        console.warn('[cig-proxy] Returning 503 (FQDN not yet detected) — OpenClaw should retry');
         res.writeHead(503, {
           'Content-Type': 'application/json',
           'Retry-After': '5',

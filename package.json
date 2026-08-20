@@ -1,6 +1,6 @@
 {
   "name": "everclaw",
-  "version": "2026.8.12.2040",
+  "version": "2026.8.20.0917",
   "type": "module",
   "description": "Open-source first AI inference via Morpheus decentralized network",
   "scripts": {

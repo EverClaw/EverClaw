@@ -2,6 +2,17 @@
 
 All notable changes to EverClaw are documented here.
 
+## [2026.8.20.0917] - 2026-08-20
+
+### Changed — Docker bind-mount fixes + Tool Calling Rule promotion
+
+- Fix: `mkdir workspace` before template scaffold (empty bind-mount crash).
+- Fix: ship boot templates + skill OUTSIDE the persistent volume (Barney bind-mount shadow).
+- Fix: ship templates/boot into the image so entrypoint scaffolds AGENTS/SOUL.
+- Add: Tool Calling Rule to AGENTS + SOUL boot templates (buffer pool instances).
+- OpenClaw pinned at v2026.7.1-2 (unchanged). Node 26.
+- Promoted from staging (production E2E verified) to main → `:latest`.
+
 ## [2026.8.12.2040] - 2026-08-12
 
 ### Changed — OpenClaw Pin v2026.5.27 → v2026.7.1-2
