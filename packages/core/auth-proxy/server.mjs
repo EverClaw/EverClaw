@@ -44,7 +44,7 @@
 import { createServer } from 'node:http';
 import { createReadStream } from 'node:fs';
 import { randomBytes, timingSafeEqual, createHmac, createHash } from 'node:crypto';
-import { readFile, unlink, stat } from 'node:fs/promises';
+import { readFile, unlink, stat, readdir } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 const execFileP = promisify(execFile); // promisified — returns { stdout, stderr } strings
@@ -842,7 +842,6 @@ bundleSweepTimer.unref();
 // bundle tokens live 10 min, so anything older than 1 h is orphaned garbage.
 async function sweepStaleExportBundles() {
   try {
-    const { readdir } = await import('node:fs/promises');
     const files = await readdir('/tmp');
     const now = Date.now();
     for (const f of files) {
