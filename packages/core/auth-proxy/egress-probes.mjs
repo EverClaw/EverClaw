@@ -116,7 +116,9 @@ async function httpStatus(url, method, body, timeoutMs, extraHeaders) {
     redirect: 'manual',
     signal: timeoutSignal(timeoutMs),
   });
-  // Drain body so sockets/connections are reused cleanly; bounded by the signal.
+  // Drain the body even on non-2xx: reusing the connection requires the
+  // response to be fully consumed, and an undrained body can stall the next
+  // request on the same keep-alive socket. Bounded by the same signal.
   try { await resp.arrayBuffer(); } catch { /* connection may be gone — result stands */ }
   return { status: resp.status, statusText: resp.statusText.slice(0, 40) };
 }

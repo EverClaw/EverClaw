@@ -726,6 +726,13 @@ function BUNDLE_NAME_STEG() {
 }
 
 // ── Upload to Edge Function (agentic + --upload) ─────────────────
+// LEGACY PUSH PATH (v1, kept for compatibility + small bundles). The active
+// production path for real bundles is the PULL architecture: the agent-export
+// Edge Function fetches the bundle from the auth-proxy
+// (/internal/export/start + /internal/export/bundle) and uploads it to
+// storage itself — because the Supabase functions gateway hangs on request
+// bodies >= ~1 MB (confirmed 2026-09-02). This push path works only for
+// bundles under that cliff.
 
 // NOTE (audit R3-F2 / R4-F1): basename is imported at module level line 30
 // (node:path); randomBytes at line 33 (node:crypto). FormData/Blob/fetch are

@@ -808,11 +808,14 @@ const BUNDLE_TOKEN_MAX = 32; // bounded map — exports are rare
 const bundleTokens = new Map(); // token -> { path, sizeBytes, expiresAt }
 
 function sweepBundleTokens(now = Date.now()) {
+  // Collect first, then delete — avoids mutating the Map while iterating.
+  const expired = [];
   for (const [token, entry] of bundleTokens) {
-    if (entry.expiresAt < now) {
-      bundleTokens.delete(token);
-      unlink(entry.path, () => {});
-    }
+    if (entry.expiresAt < now) expired.push([token, entry]);
+  }
+  for (const [token, entry] of expired) {
+    bundleTokens.delete(token);
+    unlink(entry.path, () => {});
   }
 }
 
@@ -833,6 +836,25 @@ function issueBundleToken(bundlePath, sizeBytes) {
 // Lazy expiry sweeper — keeps the map bounded without a persistent timer.
 const bundleSweepTimer = setInterval(() => sweepBundleTokens(), 60_000);
 bundleSweepTimer.unref();
+
+// Startup sweeper (Grok v2-R1): a crashed/incomplete export can leave an
+// agent-export-*.tar.gz.enc file in /tmp. Fresh exports finish in minutes and
+// bundle tokens live 10 min, so anything older than 1 h is orphaned garbage.
+async function sweepStaleExportBundles() {
+  try {
+    const { readdir } = await import('node:fs/promises');
+    const files = await readdir('/tmp');
+    const now = Date.now();
+    for (const f of files) {
+      if (!f.startsWith('agent-export-') || !f.endsWith('.tar.gz.enc')) continue;
+      try {
+        const s = await stat(join('/tmp', f));
+        if (now - s.mtimeMs > 60 * 60 * 1000) unlink(join('/tmp', f), () => {});
+      } catch { /* race — file gone */ }
+    }
+  } catch { /* /tmp unreadable — not fatal */ }
+}
+sweepStaleExportBundles();
 
 // ─── Single in-flight export guard (push + pull share it) ───────────────────
 // Parallel exports would double CPU/tar work on a shared container. A second
@@ -1100,8 +1122,7 @@ async function handleInternalExportStart(req, res) {
   }
   exportInFlight = true;
 
-  const { randomUUID } = await import('node:crypto');
-  const outputPath = `/tmp/agent-export-${Date.now()}-${randomUUID().slice(0, 8)}.tar.gz.enc`;
+  const outputPath = `/tmp/agent-export-${Date.now()}-${randomBytes(4).toString('hex')}.tar.gz.enc`;
   let responded = false;
   let stderrTail = '';
 

@@ -562,10 +562,25 @@ try:
 except Exception:
     print('err')
 " 2>/dev/null)
-  if [ "$DIAG_HTTP" = "200" ] && [ "$DIAG_PROBES" -ge 7 ]; then
-    pass "18. Egress probe (/internal/diag)" "HTTP 200, ${DIAG_PROBES} probes, size-probe: ${DIAG_SIZE_OK} (artifact: ${DIAG_FILE##*/})"
+  # Canary assertion (Grok v2-R1): the 1 MB functions-gateway POST MUST time out.
+  # If it ever returns fast (200/401), the platform cliff is gone and the
+  # push path becomes viable again — the test failing is the signal to re-evaluate.
+  DIAG_CLIFF_TIMEOUT=$(python3 -c "
+import json
+p='$DIAG_FILE'
+try:
+    d=json.load(open(p))
+    for pr in d.get('probes',[]):
+        if pr.get('name')=='http-post-1mb-upload':
+            print('yes' if (not pr.get('ok') and 'timeout' in (pr.get('error') or '')) else 'no')
+            break
+except Exception:
+    print('no')
+" 2>/dev/null)
+  if [ "$DIAG_HTTP" = "200" ] && [ "$DIAG_PROBES" -ge 7 ] && [ "$DIAG_CLIFF_TIMEOUT" = "yes" ]; then
+    pass "18. Egress probe (/internal/diag)" "HTTP 200, ${DIAG_PROBES} probes, cliff timed-out, size-probe: ${DIAG_SIZE_OK} (artifact: ${DIAG_FILE##*/})"
   else
-    fail "18. Egress probe (/internal/diag)" "HTTP ${DIAG_HTTP}, probes: ${DIAG_PROBES} (artifact: ${DIAG_FILE##*/})"
+    fail "18. Egress probe (/internal/diag)" "HTTP ${DIAG_HTTP}, probes: ${DIAG_PROBES}, cliff-timeout: ${DIAG_CLIFF_TIMEOUT} (artifact: ${DIAG_FILE##*/}) — if cliff did NOT time out, the functions-gateway 1MB limit may be gone; re-evaluate push mode."
   fi
 else
   skip "18. Egress probe (/internal/diag)" "BINDING_SECRET env not set"
