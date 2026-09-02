@@ -2,6 +2,19 @@
 
 All notable changes to EverClaw are documented here.
 
+## [Unreleased] - 2026-09-02
+
+### Added — Download Agent (Phase 2 Direct): Dashboard button → encrypted bundle → signed URL
+
+- **auth-proxy `/internal/export` route (new):** Trigger agent export from the Lovable Dashboard without an LLM in the loop. Binding-secret auth (timing-safe `timingSafeEqual` + length pre-check), `execFile` child (no shell) running `migrate-export.mjs --agentic --upload --callback-url`, 120s timeout + `SIGKILL` + independent +5s safety net (`unref`'d), randomized `/tmp` output path, `unlink` on every path (including safety net), 10 MB stdout `maxBuffer`, stderr swallowed unless `AGENT_EXPORT_DEBUG=1`, fail-closed guards for missing `expires_at` / missing `passphrase`.
+- **`agent-export` Edge Function (new, InstallOpenClaw):** Privy JWT verification, scoped to the caller's single active deployment; calls container `/internal/export` with `x-binding-secret`; strictly validates the returned download URL (Supabase hostname + per-user path prefix + token); returns `{ download_url, passphrase, expires_at }` to the Dashboard. Passphrase is NEVER persisted.
+- **`agent-export-upload` Edge Function (new):** Container upload auth via `deployments.binding_secret` DB lookup (UNIQUE constraint); 100 MB cap, `.tar.gz.enc` suffix + min-1KB validation; private `agent-exports` bucket; 1-hour signed URL (`SIGNED_URL_TTL_SECONDS = 3600` — single canonical TTL).
+- **`20260902_agent_exports.sql` migration (new):** private storage bucket, service_role-only policy, `binding_secret` partial index + UNIQUE constraint (duplicate-resolution guarded by constraint-exists check so re-runs are no-ops).
+- **`migrate-export.mjs`:** `--agentic` non-interactive JSON contract + `--upload` FormData/Blob upload (Node 22 globals with `undici` fallback); `OPENCLAW_BINDING_SECRET` from env only (never argv); bundle kept on disk unless upload actually succeeded.
+- **docker-entrypoint.sh:** exports `AGENT_EXPORT_UPLOAD_URL` (defaults to production Supabase endpoint) for the auth-proxy when the export route is used.
+- **New test:** `supabase/scripts/test-download-url.mjs` (8 assertions — DID `did:privy:` colon path-prefix lock, IDOR, traversal, token/host checks).
+- **Audit:** Grok 4.20 R7 Excellent + Claude Opus 4.8 C3 Excellent (0 Correctness / 0 Security / 0 Style). PII Guard clean.
+
 ## [2026.8.20.0917] - 2026-08-20
 
 ### Changed — Docker bind-mount fixes + Tool Calling Rule promotion

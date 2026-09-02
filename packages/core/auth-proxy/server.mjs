@@ -43,7 +43,7 @@
 
 import { createServer } from 'node:http';
 import { randomBytes, timingSafeEqual, createHmac, createHash } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { readFile, unlink } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import httpProxy from 'http-proxy';
@@ -774,6 +774,186 @@ async function handleCigProxy(req, res, url) {
   }
 }
 
+// ─── Internal Export Handler ────────────────────────────────────────────────
+// Called by the agent-export Edge Function (not by browsers).
+// Auth: x-binding-secret header matched against CIG_CONFIG.bindingSecret.
+// Runs migrate-export.mjs --agentic --upload to export + upload in one step.
+// Returns { download_url, passphrase, expires_at } on success.
+// The passphrase is returned to the Edge Function and then to the Dashboard.
+// It is NEVER stored in any database.
+
+const EXPORT_TIMEOUT_MS = 120_000; // 120s — export + upload should complete in 5-30s typically
+// Safety net below adds +5s (125s worst case). The calling Edge Function uses
+// CONTAINER_TIMEOUT_MS = 130s, deliberately larger, so it sees our 5xx/504
+// response before ITS timeout fires. Keep in sync — see
+// supabase/supabase/functions/agent-export/index.ts.
+// In the Docker container:
+//   auth-proxy is at /opt/everclaw/auth-proxy/server.mjs
+//   migrate-export.mjs is at /opt/everclaw/skill/scripts/migrate-export.mjs
+// Relative path: ../skill/scripts/migrate-export.mjs
+const EXPORT_SCRIPT = join(__dirname, '..', 'skill', 'scripts', 'migrate-export.mjs');
+const EXPORT_UPLOAD_URL = process.env.AGENT_EXPORT_UPLOAD_URL || ''; // Edge Function URL for bundle upload
+
+async function handleInternalExport(req, res) {
+  // ── 1. Auth: verify binding secret (timing-safe) ──
+  const bindingSecret = req.headers['x-binding-secret'];
+  if (!bindingSecret || !CIG_CONFIG.bindingSecret) {
+    res.writeHead(401, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'unauthorized' }));
+    return;
+  }
+
+  const providedBuf = Buffer.from(bindingSecret);
+  const expectedBuf = Buffer.from(CIG_CONFIG.bindingSecret);
+  if (providedBuf.length !== expectedBuf.length ||
+      !timingSafeEqual(providedBuf, expectedBuf)) {
+    res.writeHead(401, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'unauthorized' }));
+    return;
+  }
+
+  // ── 2. Validate upload URL is configured ──
+  if (!EXPORT_UPLOAD_URL) {
+    console.error('[internal-export] AGENT_EXPORT_UPLOAD_URL not set');
+    res.writeHead(500, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'upload_url_not_configured' }));
+    return;
+  }
+
+  // ── 3. Run export script ──
+  const { execFile } = await import('node:child_process');
+  const { randomUUID } = await import('node:crypto');
+  // Random component prevents path collision if two exports overlap in time.
+  const outputPath = `/tmp/agent-export-${Date.now()}-${randomUUID().slice(0, 8)}.tar.gz.enc`;
+  let responded = false;
+
+  console.log('[internal-export] Starting agent export...');
+
+  const child = execFile('node', [
+    EXPORT_SCRIPT,
+    '--agentic',
+    '--upload',
+    '--upload-url', EXPORT_UPLOAD_URL,
+    '--output', outputPath,
+  ], {
+    timeout: EXPORT_TIMEOUT_MS,
+    maxBuffer: 10 * 1024 * 1024, // 10 MB stdout buffer
+    env: { ...process.env, OPENCLAW_BINDING_SECRET: CIG_CONFIG.bindingSecret },
+  }, (err, stdout, _stderr) => {
+    // Cleanup encrypted bundle from /tmp in all paths (success or failure).
+    unlink(outputPath, () => {});
+
+    if (responded) return; // already sent a response (e.g. timeout handler)
+    responded = true;
+
+    if (err) {
+      // err.code is the exit code (or null for signal/timeout)
+      const isTimeout = err.killed === true;
+      console.error(`[internal-export] Export failed: ${isTimeout ? 'timeout' : err.message}`);
+      if (!res.headersSent) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          error: isTimeout ? 'export_timeout' : 'export_failed',
+          detail: isTimeout ? 'Export exceeded 120s limit' : undefined,
+        }));
+      }
+      // Ensure child is fully cleaned up on timeout
+      if (isTimeout && child.pid) {
+        try { child.kill('SIGKILL'); } catch {}
+      }
+      return;
+    }
+
+    // ── 4. Parse JSON stdout ──
+    let result;
+    try {
+      result = JSON.parse(stdout.trim());
+    } catch (parseErr) {
+      console.error('[internal-export] Failed to parse export stdout:', parseErr.message);
+      if (!res.headersSent) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'export_parse_failed' }));
+      }
+      return;
+    }
+
+    // ── 5. Return result to caller ──
+    if (result.download_url) {
+      // expires_at is passed through from the upload Edge Function — the
+      // canonical source (computed from SIGNED_URL_TTL_SECONDS there).
+      // No local fallback; if it is missing the response is incomplete.
+      if (!result.expires_at) {
+        console.error('[internal-export] Missing expires_at from upload result');
+        if (!res.headersSent) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'export_missing_expires_at' }));
+        }
+        return;
+      }
+      // Passphrase must accompany the URL — the response contract requires
+      // it, and the caller (agent-export Edge Function) needs it to hand to
+      // the Dashboard. If it is missing (contract violation), fail closed
+      // rather than return 200 with an unusable bundle (Claude C1-F5).
+      if (!result.passphrase) {
+        console.error('[internal-export] Missing passphrase from export result');
+        if (!res.headersSent) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'export_missing_passphrase' }));
+        }
+        return;
+      }
+      console.log('[internal-export] Export completed successfully');
+      if (!res.headersSent) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          download_url: result.download_url,
+          passphrase: result.passphrase,
+          expires_at: result.expires_at,
+          size: result.size,
+        }));
+      }
+    } else if (result.upload_error) {
+      console.error('[internal-export] Upload failed:', result.upload_error);
+      if (!res.headersSent) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          error: 'upload_failed',
+          detail: result.upload_error,
+        }));
+      }
+    } else {
+      console.error('[internal-export] No download_url in result');
+      if (!res.headersSent) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'export_no_download_url' }));
+      }
+    }
+  });
+
+  // Child stderr: forward only when AGENT_EXPORT_DEBUG=1 (diagnostics).
+  // Otherwise swallow it — the JSON contract is on stdout (maxBuffer 10 MB)
+  // and stderr must not bloat proxy logs (Grok R5-F5 / R6-F4).
+  if (process.env.AGENT_EXPORT_DEBUG === '1') {
+    child.stderr?.on('data', (chunk) => {
+      process.stderr.write(`[export-child] ${chunk}`);
+    });
+  }
+
+  // Safety net: if execFile timeout fires but callback hasn't run yet
+  // (unlikely, but possible for edge cases), send a timeout response.
+  const timeoutSafety = setTimeout(() => {
+    if (!responded && !res.headersSent) {
+      responded = true;
+      console.error('[internal-export] Safety-net timeout fired — killing child');
+      if (child.pid) { try { child.kill('SIGKILL'); } catch {} }
+      unlink(outputPath, () => {});
+      res.writeHead(504, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'export_timeout' }));
+    }
+  }, EXPORT_TIMEOUT_MS + 5000);
+  timeoutSafety.unref();
+}
+
 async function handleRequest(req, res) {
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
   const pathname = url.pathname;
@@ -1078,6 +1258,15 @@ async function handleRequest(req, res) {
   // ── GET /auth/handoff without POST → serve login page ──
   if (pathname === '/auth/handoff' && req.method === 'GET') {
     serveLoginPage(res);
+    return;
+  }
+
+  // ── Internal Export: trigger agent export from Dashboard button ──
+  // Auth: x-binding-secret header (same secret used for CIG).
+  // No session cookie needed — this is called by the Edge Function, not the browser.
+  // Runs migrate-export.mjs --agentic --upload, returns download_url + passphrase.
+  if (pathname === '/internal/export' && req.method === 'POST') {
+    await handleInternalExport(req, res);
     return;
   }
 
