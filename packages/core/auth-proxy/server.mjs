@@ -42,13 +42,18 @@
  */
 
 import { createServer } from 'node:http';
+import { createReadStream } from 'node:fs';
 import { randomBytes, timingSafeEqual, createHmac, createHash } from 'node:crypto';
-import { readFile, unlink } from 'node:fs/promises';
+import { readFile, unlink, stat } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+const execFileP = promisify(execFile); // promisified — returns { stdout, stderr } strings
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import httpProxy from 'http-proxy';
 import cookie from 'cookie';
 import { importSPKI, importJWK, jwtVerify } from 'jose';
+import { runEgressProbes } from './egress-probes.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -782,7 +787,7 @@ async function handleCigProxy(req, res, url) {
 // The passphrase is returned to the Edge Function and then to the Dashboard.
 // It is NEVER stored in any database.
 
-const EXPORT_TIMEOUT_MS = 120_000; // 120s — export + upload should complete in 5-30s typically
+const EXPORT_TIMEOUT_MS = parseInt(process.env.AGENT_EXPORT_TIMEOUT_MS || '120000', 10); // 120s default; env-overridable for containers with heavy workspaces (must stay < the Edge Function's 130s container budget — see agent-export/index.ts)
 // Safety net below adds +5s (125s worst case). The calling Edge Function uses
 // CONTAINER_TIMEOUT_MS = 130s, deliberately larger, so it sees our 5xx/504
 // response before ITS timeout fires. Keep in sync — see
@@ -794,23 +799,137 @@ const EXPORT_TIMEOUT_MS = 120_000; // 120s — export + upload should complete i
 const EXPORT_SCRIPT = join(__dirname, '..', 'skill', 'scripts', 'migrate-export.mjs');
 const EXPORT_UPLOAD_URL = process.env.AGENT_EXPORT_UPLOAD_URL || ''; // Edge Function URL for bundle upload
 
+// ─── Pull-path bundle tokens (single-use, memory-only) ─────────────────────
+// /internal/export/start issues a token; /internal/export/bundle consumes it
+// exactly once and streams the file. Tokens expire after 10 min. The bundle
+// file is deleted after transfer (success, failure, timeout, or expiry).
+const BUNDLE_TOKEN_TTL_MS = 10 * 60_000;
+const BUNDLE_TOKEN_MAX = 32; // bounded map — exports are rare
+const bundleTokens = new Map(); // token -> { path, sizeBytes, expiresAt }
+
+function sweepBundleTokens(now = Date.now()) {
+  for (const [token, entry] of bundleTokens) {
+    if (entry.expiresAt < now) {
+      bundleTokens.delete(token);
+      unlink(entry.path, () => {});
+    }
+  }
+}
+
+function issueBundleToken(bundlePath, sizeBytes) {
+  sweepBundleTokens();
+  // Evict oldest entry if the map is at capacity (bounded memory).
+  if (bundleTokens.size >= BUNDLE_TOKEN_MAX) {
+    const oldest = bundleTokens.keys().next().value;
+    const evicted = bundleTokens.get(oldest);
+    bundleTokens.delete(oldest);
+    unlink(evicted.path, () => {});
+  }
+  const token = randomBytes(24).toString('hex');
+  bundleTokens.set(token, { path: bundlePath, sizeBytes, expiresAt: Date.now() + BUNDLE_TOKEN_TTL_MS });
+  return token;
+}
+
+// Lazy expiry sweeper — keeps the map bounded without a persistent timer.
+const bundleSweepTimer = setInterval(() => sweepBundleTokens(), 60_000);
+bundleSweepTimer.unref();
+
+// ─── Single in-flight export guard (push + pull share it) ───────────────────
+// Parallel exports would double CPU/tar work on a shared container. A second
+// export request while one is running gets an immediate 409.
+let exportInFlight = false;
+
+// ─── /internal/diag — bounded egress diagnostics (see egress-probes.mjs) ────
+const DIAG_CACHE_TTL_MS = 5 * 60_000;
+let diagCache = { at: 0, payload: null, inflight: null };
+
+async function runExportSizeProbe() {
+  const t0 = Date.now();
+  try {
+    const { stdout } = await execFileP('node', [EXPORT_SCRIPT, '--diag-size-probe'], {
+      timeout: 240_000, // heavy workspaces can take minutes on first probe (cached 5 min after)
+      maxBuffer: 1024 * 1024, // 1 MB stdout cap (size JSON is tiny)
+      env: { ...process.env },
+    });
+    const parsed = JSON.parse(stdout.trim());
+    return {
+      ok: parsed.ok !== false,
+      sizeBytes: parsed.sizeBytes ?? null,
+      elapsedMs: Date.now() - t0,
+      error: parsed.error || null,
+    };
+  } catch (err) {
+    return { ok: false, sizeBytes: null, elapsedMs: Date.now() - t0, error: String(err.message || err).slice(0, 200) };
+  }
+}
+
+async function getDiagnostics() {
+  const now = Date.now();
+  if (diagCache.payload && now - diagCache.at < DIAG_CACHE_TTL_MS) {
+    return diagCache.payload;
+  }
+  // Deduplicate concurrent diag calls (one probe run, shared result).
+  if (diagCache.inflight) return diagCache.inflight;
+  const run = (async () => {
+    const probes = await runEgressProbes();
+    const exportSizeProbe = await runExportSizeProbe();
+    const payload = {
+      generatedAt: new Date().toISOString(),
+      containerFqdn: CIG_CONFIG.containerFqdn || null,
+      exportScript: EXPORT_SCRIPT,
+      probes,
+      exportSizeProbe,
+    };
+    diagCache = { at: Date.now(), payload, inflight: null };
+    return payload;
+  })();
+  diagCache.inflight = run;
+  try {
+    return await run;
+  } catch (err) {
+    diagCache.inflight = null;
+    return { generatedAt: new Date().toISOString(), probes: [], exportSizeProbe: { ok: false, error: String(err.message || err) } };
+  }
+}
+
+async function handleInternalDiag(req, res) {
+  // Auth: binding secret (same as /internal/export). Read-only diagnostic.
+  if (!verifyBindingSecret(req)) {
+    res.writeHead(401, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'unauthorized' }));
+    return;
+  }
+  const payload = await getDiagnostics();
+  res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+  res.end(JSON.stringify(payload));
+}
+
+// Shared binding-secret check for all /internal/* routes (timing-safe).
+function verifyBindingSecret(req) {
+  const provided = req.headers['x-binding-secret'];
+  const expected = CIG_CONFIG.bindingSecret;
+  if (!provided || !expected) return false;
+  const providedBuf = Buffer.from(provided);
+  const expectedBuf = Buffer.from(expected);
+  return providedBuf.length === expectedBuf.length &&
+    timingSafeEqual(providedBuf, expectedBuf);
+}
+
 async function handleInternalExport(req, res) {
   // ── 1. Auth: verify binding secret (timing-safe) ──
-  const bindingSecret = req.headers['x-binding-secret'];
-  if (!bindingSecret || !CIG_CONFIG.bindingSecret) {
+  if (!verifyBindingSecret(req)) {
     res.writeHead(401, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: 'unauthorized' }));
     return;
   }
 
-  const providedBuf = Buffer.from(bindingSecret);
-  const expectedBuf = Buffer.from(CIG_CONFIG.bindingSecret);
-  if (providedBuf.length !== expectedBuf.length ||
-      !timingSafeEqual(providedBuf, expectedBuf)) {
-    res.writeHead(401, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: 'unauthorized' }));
+  // ── 1b. In-flight guard: one export at a time per container ──
+  if (exportInFlight) {
+    res.writeHead(409, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'export_in_progress' }));
     return;
   }
+  exportInFlight = true;
 
   // ── 2. Validate upload URL is configured ──
   if (!EXPORT_UPLOAD_URL) {
@@ -849,6 +968,7 @@ async function handleInternalExport(req, res) {
 
     if (responded) return; // already sent a response (e.g. timeout handler)
     responded = true;
+    exportInFlight = false;
 
     if (err) {
       // err.code is the exit code (or null for signal/timeout)
@@ -918,12 +1038,15 @@ async function handleInternalExport(req, res) {
         }));
       }
     } else if (result.upload_error) {
-      console.error('[internal-export] Upload failed:', result.upload_error);
+      // Phase tail included here too — without it the upload branch is blind
+      // (diagnostics lesson from staging timeout debug, 2026-09-02).
+      console.error(`[internal-export] Upload failed: ${result.upload_error} | phases: ${stderrTail}`);
       if (!res.headersSent) {
         res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({
           error: 'upload_failed',
           detail: result.upload_error,
+          phases: stderrTail || undefined,
         }));
       }
     } else {
@@ -949,6 +1072,7 @@ async function handleInternalExport(req, res) {
   const timeoutSafety = setTimeout(() => {
     if (!responded && !res.headersSent) {
       responded = true;
+      exportInFlight = false;
       console.error('[internal-export] Safety-net timeout fired — killing child');
       if (child.pid) { try { child.kill('SIGKILL'); } catch {} }
       unlink(outputPath, () => {});
@@ -957,6 +1081,186 @@ async function handleInternalExport(req, res) {
     }
   }, EXPORT_TIMEOUT_MS + 5000);
   timeoutSafety.unref();
+}
+
+// ─── Pull path: POST /internal/export/start ──────────────────────────────────
+// Runs migrate-export.mjs --agentic WITHOUT upload. Returns bundleToken +
+// passphrase + size. The caller then GETs /internal/export/bundle?token=...
+// to stream the file. Passphrase is returned in this JSON response only.
+async function handleInternalExportStart(req, res) {
+  if (!verifyBindingSecret(req)) {
+    res.writeHead(401, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'unauthorized' }));
+    return;
+  }
+  if (exportInFlight) {
+    res.writeHead(409, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'export_in_progress' }));
+    return;
+  }
+  exportInFlight = true;
+
+  const { randomUUID } = await import('node:crypto');
+  const outputPath = `/tmp/agent-export-${Date.now()}-${randomUUID().slice(0, 8)}.tar.gz.enc`;
+  let responded = false;
+  let stderrTail = '';
+
+  console.log('[internal/export/start] Starting agent export (pull path)...');
+  const child = execFile('node', [
+    EXPORT_SCRIPT,
+    '--agentic',
+    '--output', outputPath,
+  ], {
+    timeout: EXPORT_TIMEOUT_MS,
+    maxBuffer: 10 * 1024 * 1024,
+    env: { ...process.env },
+  }, (err, stdout, _stderr) => {
+    responded = true;
+    exportInFlight = false;
+    stderrTail = String(_stderr || '').split('\n').filter(Boolean).slice(-5).join(' | ').slice(-500);
+
+    if (err) {
+      const isTimeout = err.killed === true;
+      console.error(`[internal/export/start] Export failed: ${isTimeout ? 'timeout' : err.message} | phases: ${stderrTail}`);
+      unlink(outputPath, () => {});
+      if (!res.headersSent) {
+        res.writeHead(isTimeout ? 504 : 500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          error: isTimeout ? 'export_timeout' : 'export_failed',
+          detail: isTimeout ? 'Export exceeded 120s limit' : undefined,
+          phases: stderrTail || undefined,
+        }));
+      }
+      if (isTimeout && child.pid) { try { child.kill('SIGKILL'); } catch {} }
+      return;
+    }
+
+    let result;
+    try {
+      result = JSON.parse(stdout.trim());
+    } catch (parseErr) {
+      console.error('[internal/export/start] Failed to parse export stdout:', parseErr.message);
+      unlink(outputPath, () => {});
+      if (!res.headersSent) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'export_parse_failed', phases: stderrTail || undefined }));
+      }
+      return;
+    }
+
+    // Contract: { outputPath, passphrase, bundleChecksum, size }
+    if (!result.outputPath || !result.passphrase || typeof result.size !== 'number') {
+      console.error('[internal/export/start] Incomplete export result (contract violation)');
+      unlink(outputPath, () => {});
+      if (!res.headersSent) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'export_incomplete_result' }));
+      }
+      return;
+    }
+
+    const token = issueBundleToken(result.outputPath, result.size);
+    console.log(`[internal/export/start] Export ready: size=${result.size} tokenIssued=true`);
+    if (!res.headersSent) {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        bundleToken: token,
+        sizeBytes: result.size,
+        passphrase: result.passphrase,
+        expiresAt: new Date(Date.now() + BUNDLE_TOKEN_TTL_MS).toISOString(),
+      }));
+    }
+  });
+
+  if (process.env.AGENT_EXPORT_DEBUG === '1') {
+    child.stderr?.on('data', (chunk) => {
+      process.stderr.write(`[export-child] ${chunk}`);
+    });
+  }
+
+  const timeoutSafety = setTimeout(() => {
+    if (!responded && !res.headersSent) {
+      responded = true;
+      exportInFlight = false;
+      console.error('[internal/export/start] Safety-net timeout fired — killing child');
+      if (child.pid) { try { child.kill('SIGKILL'); } catch {} }
+      unlink(outputPath, () => {});
+      res.writeHead(504, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'export_timeout' }));
+    }
+  }, EXPORT_TIMEOUT_MS + 5000);
+  timeoutSafety.unref();
+}
+
+// ─── Pull path: GET /internal/export/bundle?token=... ────────────────────────
+// Streams the encrypted bundle file. Single-use token (consumed on arrival),
+// 10-min TTL, file deleted after transfer on every path.
+async function handleInternalExportBundle(req, res) {
+  if (!verifyBindingSecret(req)) {
+    res.writeHead(401, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'unauthorized' }));
+    return;
+  }
+
+  const url = new URL(req.url, 'http://localhost');
+  const token = url.searchParams.get('token');
+  if (!token) {
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'missing_token' }));
+    return;
+  }
+
+  // Single-use: consume the token BEFORE streaming. A second GET with the
+  // same token gets 404 even while the first transfer is still running.
+  const entry = bundleTokens.get(token);
+  bundleTokens.delete(token);
+  if (!entry) {
+    res.writeHead(404, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'token_not_found' }));
+    return;
+  }
+  if (entry.expiresAt < Date.now()) {
+    unlink(entry.path, () => {});
+    res.writeHead(410, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'token_expired' }));
+    return;
+  }
+
+  let fileStat;
+  try {
+    fileStat = await stat(entry.path);
+  } catch {
+    res.writeHead(404, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'bundle_missing' }));
+    return;
+  }
+
+  res.writeHead(200, {
+    'Content-Type': 'application/octet-stream',
+    'Content-Length': fileStat.size,
+    'Content-Disposition': `attachment; filename="agent-bundle-${Date.now()}.tar.gz.enc"`,
+    'Cache-Control': 'no-store',
+  });
+
+  const stream = createReadStream(entry.path);
+  let cleanedUp = false;
+  const cleanup = () => {
+    if (cleanedUp) return;
+    cleanedUp = true;
+    unlink(entry.path, () => {});
+  };
+  stream.on('error', (err) => {
+    console.error('[internal/export/bundle] Stream error:', err.message);
+    cleanup();
+    res.destroy();
+  });
+  stream.on('end', cleanup);
+  res.on('close', () => {
+    // Client disconnected mid-transfer — stop reading and delete the file.
+    cleanup();
+    stream.destroy();
+  });
+  stream.pipe(res);
 }
 
 async function handleRequest(req, res) {
@@ -1272,6 +1576,24 @@ async function handleRequest(req, res) {
   // Runs migrate-export.mjs --agentic --upload, returns download_url + passphrase.
   if (pathname === '/internal/export' && req.method === 'POST') {
     await handleInternalExport(req, res);
+    return;
+  }
+
+  // ── Internal Diagnostics (egress probes) — read-only, binding-secret auth ──
+  if (pathname === '/internal/diag' && req.method === 'GET') {
+    await handleInternalDiag(req, res);
+    return;
+  }
+
+  // ── Pull path: start an export and get a one-time bundle token ──
+  if (pathname === '/internal/export/start' && req.method === 'POST') {
+    await handleInternalExportStart(req, res);
+    return;
+  }
+
+  // ── Pull path: stream the bundle (single-use token) ──
+  if (pathname === '/internal/export/bundle' && req.method === 'GET') {
+    await handleInternalExportBundle(req, res);
     return;
   }
 

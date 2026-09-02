@@ -537,6 +537,40 @@ skip "16. Modality check (in-image files)" "remote-only mode; use CI artifacts /
 # CI workflow must assert bind-mount fix paths; remote HTTP cannot inspect image FS.
 skip "17. Image regression (bind-mount fix)" "remote-only mode; enforce via CI docker-build checks"
 
+# Test 18: Egress probe — /internal/diag (Download Agent v2).
+# Needs BINDING_SECRET (env). Asserts: diag reachable, 7+ probes present, and
+# export-size probe ran (ok or measured error). Records a JSON artifact.
+DIAG_FILE="$LOG_DIR/egress-diag-$(date -u '+%Y%m%d-%H%M%S').json"
+mkdir -p "$LOG_DIR" 2>/dev/null
+if [ -n "${BINDING_SECRET:-}" ]; then
+  DIAG_HTTP=$(curl -s -o "$DIAG_FILE" -w '%{http_code}' --max-time 120 \
+    -H "x-binding-secret: $BINDING_SECRET" "${BASE_URL}/internal/diag" 2>/dev/null || echo "000")
+  DIAG_PROBES=$(python3 -c "
+import json,sys
+try:
+    d=json.load(open('$DIAG_FILE'))
+    print(len(d.get('probes',[])))
+except Exception:
+    print('0')
+" 2>/dev/null)
+  DIAG_SIZE_OK=$(python3 -c "
+import json,sys
+try:
+    d=json.load(open('$DIAG_FILE'))
+    esp=d.get('exportSizeProbe',{})
+    print('ok' if esp.get('ok') else 'err')
+except Exception:
+    print('err')
+" 2>/dev/null)
+  if [ "$DIAG_HTTP" = "200" ] && [ "$DIAG_PROBES" -ge 7 ]; then
+    pass "18. Egress probe (/internal/diag)" "HTTP 200, ${DIAG_PROBES} probes, size-probe: ${DIAG_SIZE_OK} (artifact: ${DIAG_FILE##*/})"
+  else
+    fail "18. Egress probe (/internal/diag)" "HTTP ${DIAG_HTTP}, probes: ${DIAG_PROBES} (artifact: ${DIAG_FILE##*/})"
+  fi
+else
+  skip "18. Egress probe (/internal/diag)" "BINDING_SECRET env not set"
+fi
+
 # ─── Summary ──────────────────────────────────────────────────────────────────
 
 echo "" | tee -a "$LOG_FILE"

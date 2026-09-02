@@ -526,6 +526,13 @@ export async function exportMigrateBundle(options = {}) {
     signalLink: true,   // always — one number per instance (L7)
     sessionHistory: true, // always — non-portable (L13)
     walletKey: keychainMissingWallet(),
+    // v2 (2026-09-02): heavy reproducible dirs are excluded from workspaces.tar.
+    // deps come back via dependency-manifest.json on import (L1/L2), so
+    // node_modules/git/caches must NOT be shipped — they are what pushes real
+    // bundles past 100 MB and past the 120s route budget.
+    nodeModules: true,
+    gitDirs: true,
+    caches: true,
   };
 
   // Keychain secrets (encrypted, never cleartext on disk)
@@ -572,7 +579,20 @@ export async function exportMigrateBundle(options = {}) {
   const workspaces = findWorkspaces(openclawDir);
   tracePhase(`workspaces-found count=${workspaces.length}`);
   if (workspaces.length > 0) {
+    // Exclude heavy reproducible dirs (v2): node_modules, .git, caches, venvs,
+    // pycache. Portable data only — dependency-manifest.json restores deps on
+    // import. Keeps real bundles under the 100 MB cap and exports fast.
+    // Both GNU tar (container) and bsdtar (macOS) honor --exclude globs.
+    const EXCLUDES = [
+      '*/node_modules', '*/node_modules/*',
+      '*/.git', '*/.git/*',
+      '*/.cache', '*/.cache/*',
+      '*/.venv', '*/.venv/*',
+      '*/__pycache__', '*/__pycache__/*',
+      '*/.DS_Store',
+    ];
     const tarArgs = ['-cf', join(stage, 'workspaces.tar'),
+      ...EXCLUDES.flatMap(e => ['--exclude', e]),
       '-C', openclawDir, ...workspaces.map(w => w.name)];
     const wsResult = spawnSync('tar', tarArgs,
       { timeout: 600000 });
@@ -712,7 +732,22 @@ function BUNDLE_NAME_STEG() {
 // Node 18+ globals (undici) — the container runs Node 22+, so no import needed.
 // This comment exists so future auditors do not reopen the "unused import" item.
 
-const MAX_UPLOAD_BYTES = 100 * 1024 * 1024; // 100 MB — must match Edge Function limit
+const MAX_UPLOAD_BYTES = 100 * 1024 * 1024; // 100 MB — must match Edge Function limit (v2: revisit after real bundle-size measurement)
+
+// Retry policy (v2, egress-hardening): total budget 90s across up to 3
+// attempts. Deterministic rejections (401/403/413) fail fast — retrying them
+// cannot help. Network errors, timeouts, and 5xx are retried with backoff.
+const UPLOAD_TOTAL_BUDGET_MS = 90_000;
+const UPLOAD_MAX_ATTEMPTS = 3;
+const UPLOAD_BACKOFF_MS = [0, 2000, 4000];
+
+function isRetryableUploadError(err) {
+  const name = err?.name || '';
+  const msg = String(err?.message || err);
+  if (name === 'TimeoutError') return true;
+  if (msg.includes('Upload rejected')) return false; // deterministic 401/403/413
+  return /fetch failed|ECONN|ETIMEDOUT|UND_ERR|socket|network|aborted/i.test(msg);
+}
 
 /**
  * Upload the encrypted bundle to the agent-export-upload Edge Function.
@@ -738,34 +773,68 @@ async function uploadBundle(outputPath, uploadUrl) {
 
   // Load file into Buffer — safe because size check above caps at 100 MB.
   const fileBuffer = await fs.readFile(outputPath);
-
-  // Use the platform FormData + Blob API (available in Node 18+ via undici).
-  // This avoids fragile manual multipart construction.
-  // If the globals are somehow absent in a minimal runtime, fall back to
-  // undici's named exports (bundled with Node, no extra dependency).
-  const { FormData: FD, Blob: BL } = globalThis.FormData && globalThis.Blob
-    ? { FormData: globalThis.FormData, Blob: globalThis.Blob }
-    : await import('undici');
-  const formData = new FD();
-  formData.append('file', new BL([fileBuffer], { type: 'application/octet-stream' }), basename(outputPath));
-
   tracePhase(`upload-start size=${(fileSize / 1024 / 1024).toFixed(1)}MB`);
-  const resp = await fetch(uploadUrl, {
-    method: 'POST',
-    headers: {
-      'x-binding-secret': bindingSecret,
-    },
-    body: formData,
-    signal: AbortSignal.timeout(90_000), // bounded — a hung upload must not eat the 120s route budget
-  });
-  tracePhase(`upload-response status=${resp.status}`);
 
-  if (!resp.ok) {
-    const errText = await resp.text();
-    throw new Error(`Upload failed (${resp.status}): ${errText.slice(0, 500)}`);
+  const startedAt = Date.now();
+  let lastErr = null;
+
+  for (let attempt = 1; attempt <= UPLOAD_MAX_ATTEMPTS; attempt++) {
+    const elapsed = Date.now() - startedAt;
+    const backoff = UPLOAD_BACKOFF_MS[attempt - 1] || 0;
+    const remaining = UPLOAD_TOTAL_BUDGET_MS - elapsed;
+    // First attempt gets the most room; later attempts share the remainder.
+    const attemptBudget = Math.min(remaining - backoff, attempt === 1 ? 60_000 : 45_000);
+    if (attemptBudget <= 5000) {
+      if (lastErr) throw lastErr;
+      throw new Error('Upload budget exhausted before any attempt could complete');
+    }
+    if (attempt > 1) {
+      tracePhase(`upload-backoff attempt=${attempt} ms=${backoff}`);
+      await new Promise((r) => setTimeout(r, backoff));
+    }
+    tracePhase(`upload-attempt ${attempt}/${UPLOAD_MAX_ATTEMPTS} budget=${attemptBudget}ms`);
+
+    // Use the platform FormData + Blob API (available in Node 18+ via undici).
+    // Rebuilt per attempt — fetch bodies are single-use streams.
+    // If the globals are somehow absent in a minimal runtime, fall back to
+    // undici's named exports (bundled with Node, no extra dependency).
+    const { FormData: FD, Blob: BL } = globalThis.FormData && globalThis.Blob
+      ? { FormData: globalThis.FormData, Blob: globalThis.Blob }
+      : await import('undici');
+    const formData = new FD();
+    formData.append('file', new BL([fileBuffer], { type: 'application/octet-stream' }), basename(outputPath));
+
+    try {
+      const resp = await fetch(uploadUrl, {
+        method: 'POST',
+        headers: { 'x-binding-secret': bindingSecret },
+        body: formData,
+        signal: AbortSignal.timeout(attemptBudget),
+      });
+      tracePhase(`upload-response status=${resp.status}`);
+
+      if (resp.status === 401 || resp.status === 403 || resp.status === 413) {
+        const errText = await resp.text();
+        // Deterministic rejection — retrying cannot help. Fail fast.
+        throw new Error(`Upload rejected (${resp.status}): ${errText.slice(0, 300)}`);
+      }
+      if (!resp.ok) {
+        lastErr = new Error(`Upload failed (${resp.status}): ${(await resp.text()).slice(0, 300)}`);
+        tracePhase(`upload-retryable status=${resp.status} attempt=${attempt}`);
+        continue; // 5xx — retry
+      }
+      return await resp.json();
+    } catch (err) {
+      const retryable = isRetryableUploadError(err);
+      if (retryable && attempt < UPLOAD_MAX_ATTEMPTS) {
+        lastErr = err;
+        tracePhase(`upload-error attempt=${attempt} retryable=true msg=${String(err.message || err).slice(0, 120)}`);
+        continue;
+      }
+      throw err;
+    }
   }
-
-  return await resp.json();
+  throw lastErr || new Error('Upload failed after retries');
 }
 
 // ── CLI ──────────────────────────────────────────────────────────
@@ -773,7 +842,7 @@ async function uploadBundle(outputPath, uploadUrl) {
 function parseArgs(argv) {
   const args = { output: null, passphrase: null, role: 'primary', cronsFile: null,
     keychainServices: [], targetPlatform: null, dryRun: false, serve: false, agentic: false,
-    upload: false, uploadUrl: null, callbackUrl: null, help: false };
+    upload: false, uploadUrl: null, callbackUrl: null, diagSizeProbe: false, help: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     const val = () => { if (i + 1 >= argv.length) { console.error(`❌ ${a} requires a value`); process.exit(1); } return argv[++i]; };
@@ -787,6 +856,7 @@ function parseArgs(argv) {
       case '--dry-run': args.dryRun = true; break;
       case '--serve': args.serve = true; break;
       case '--agentic': args.agentic = true; break;
+      case '--diag-size-probe': args.diagSizeProbe = true; break;
       case '--upload': args.upload = true; break;
       case '--upload-url': args.uploadUrl = val(); break;
       case '--callback-url': args.callbackUrl = val(); break;
@@ -814,6 +884,9 @@ Flags:
   --keychain-service <svc>   Extra keychain service to include (repeatable)
   --dry-run                  Show plan without writing anything
   --serve                     Export + start download server (Option D)
+  --diag-size-probe           Run a real full export, report {ok,sizeBytes,elapsedMs}
+                             as JSON on stdout, delete the bundle, exit 0.
+                             Used by /internal/diag for bundle-size measurement.
   --agentic                   Non-interactive mode: auto-generate passphrase,
                              output JSON to stdout ({ outputPath, passphrase,
                              bundleChecksum, size }). No /dev/tty access.
@@ -840,6 +913,40 @@ if (import.meta.url === `file://${process.argv[1]}` || process.argv[1]?.endsWith
         const { runServe } = await import('./migrate-serve.mjs');
         await runServe(args);
         return; // runServe spawns the server child and exits when it exits
+      }
+
+      // --diag-size-probe: measure a real full export, report size, clean up.
+      // Independent top-level branch (does NOT require --agentic) — the
+      // auth-proxy /internal/diag runs it as `node migrate-export.mjs
+      // --diag-size-probe`. No passphrase, checksum, or path is emitted —
+      // size + timing only. The generated passphrase is discarded.
+      if (args.diagSizeProbe) {
+        const t0 = Date.now();
+        try {
+          const { generatePassphrase } = await import('./lib/encryption.mjs');
+          const pp = generatePassphrase(6);
+          if (pp.length < MIN_PASSPHRASE_LEN) throw new Error(`auto-passphrase too short (${pp.length})`);
+          const probeArgs = { ...args, passphrase: pp };
+          if (!probeArgs.output) {
+            probeArgs.output = join(tmpdir(), `migrate-bundle-${timestamp()}.tar.gz.enc`);
+          }
+          const res = await exportMigrateBundle(probeArgs);
+          if (res.dryRun) {
+            process.stdout.write(JSON.stringify({ ok: true, dryRun: true, sizeBytes: null, elapsedMs: Date.now() - t0 }) + '\n');
+            return;
+          }
+          const { statSync } = await import('node:fs');
+          const sizeBytes = statSync(res.outputPath).size;
+          const fsProbe = await import('node:fs/promises');
+          await fsProbe.unlink(res.outputPath).catch(() => {});
+          process.stdout.write(JSON.stringify({ ok: true, sizeBytes, elapsedMs: Date.now() - t0 }) + '\n');
+        } catch (err) {
+          process.stdout.write(JSON.stringify({
+            ok: false, sizeBytes: null, elapsedMs: Date.now() - t0,
+            error: String(err.message || err).slice(0, 200),
+          }) + '\n');
+        }
+        return;
       }
 
       if (args.agentic) {
