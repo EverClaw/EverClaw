@@ -919,7 +919,12 @@ async function getDiagnostics() {
       probes,
       exportSizeProbe,
     };
-    diagCache = { at: Date.now(), payload, inflight: null };
+    // Don't cache a poisoned size probe (Claude v2-C4): if the size probe was
+    // skipped because a real export is in flight, keep the cache entry stale
+    // so the next diag call retries it instead of serving 'export_in_progress'
+    // for 5 minutes.
+    const sizeUsable = exportSizeProbe.ok || exportSizeProbe.error !== 'export_in_progress';
+    diagCache = { at: sizeUsable ? Date.now() : 0, payload, inflight: null };
     return payload;
   })();
   diagCache.inflight = run;
@@ -983,16 +988,17 @@ async function handleInternalExport(req, res) {
   exportInFlight = true;
 
   // ── 3. Run export script ──
-  const { execFile } = await import('node:child_process');
-  const { randomUUID } = await import('node:crypto');
-  // Random component prevents path collision if two exports overlap in time.
-  const outputPath = `/tmp/agent-export-${Date.now()}-${randomUUID().slice(0, 8)}.tar.gz.enc`;
-  let responded = false;
+  // try/catch around acquire→spawn (Claude v2-C4): a synchronous throw between
+  // guard acquisition and spawn would wedge the flag forever (the R2 failure
+  // class via a rarer path). execFile/randomBytes come from top-level imports.
+  try {
+    const outputPath = `/tmp/agent-export-${Date.now()}-${randomBytes(4).toString('hex')}.tar.gz.enc`;
+    let responded = false;
 
-  console.log('[internal-export] Starting agent export...');
+    console.log('[internal-export] Starting agent export...');
 
-  let stderrTail = '';
-  const child = execFile('node', [
+    let stderrTail = '';
+    const child = execFile('node', [
     EXPORT_SCRIPT,
     '--agentic',
     '--upload',
@@ -1124,9 +1130,19 @@ async function handleInternalExport(req, res) {
     }
   }, EXPORT_TIMEOUT_MS + 5000);
   timeoutSafety.unref();
+  } catch (spawnErr) {
+    // Synchronous throw between guard acquire and spawn — release the guard
+    // and answer, never wedge the subsystem (Claude v2-C4).
+    exportInFlight = false;
+    console.error('[internal-export] Spawn failed:', spawnErr?.message || spawnErr);
+    if (!res.headersSent) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'export_spawn_failed' }));
+    }
+  }
 }
 
-// ─── Pull path: POST /internal/export/start ──────────────────────────────────
+// ─── Pull path: POST /internal/export/start ──────────────────────────────
 // Runs migrate-export.mjs --agentic WITHOUT upload. Returns bundleToken +
 // passphrase + size. The caller then GETs /internal/export/bundle?token=...
 // to stream the file. Passphrase is returned in this JSON response only.
@@ -1206,7 +1222,20 @@ async function handleInternalExportStart(req, res) {
       return;
     }
 
-    const token = issueBundleToken(result.outputPath, result.size);
+    // Proxy-owned path only (Claude v2-C4): never trust the child's reported
+    // path for token issuance/streaming — a divergent (buggy or compromised)
+    // child must not turn the bundle route into an arbitrary-file-read.
+    if (result.outputPath !== outputPath) {
+      console.error('[internal/export/start] Child reported a foreign outputPath — refusing');
+      unlink(outputPath, () => {});
+      if (!res.headersSent) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'export_path_mismatch' }));
+      }
+      return;
+    }
+
+    const token = issueBundleToken(outputPath, result.size);
     console.log(`[internal/export/start] Export ready: size=${result.size} tokenIssued=true`);
     if (!res.headersSent) {
       res.writeHead(200, { 'Content-Type': 'application/json' });
