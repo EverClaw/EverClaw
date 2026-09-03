@@ -46,8 +46,6 @@ import { createReadStream } from 'node:fs';
 import { randomBytes, timingSafeEqual, createHmac, createHash } from 'node:crypto';
 import { readFile, unlink, stat, readdir } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
-const execFileP = promisify(execFile); // promisified — returns { stdout, stderr } strings
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import httpProxy from 'http-proxy';
@@ -894,18 +892,36 @@ async function runExportSizeProbe() {
   exportInFlight = true;
   const t0 = Date.now();
   try {
-    const { stdout } = await execFileP('node', [EXPORT_SCRIPT, '--diag-size-probe'], {
-      // Under the diag caller budget (Test 18 curl --max-time 120s): probes
-      // take <= ~30s wall (parallelized), leaving room for the size probe.
-      // Heavy workspaces that exceed this return an error — acceptable for a
-      // diagnostic; the probe result is cached and re-runs are cheap.
-      timeout: 90_000,
-      maxBuffer: 1024 * 1024, // 1 MB stdout cap (size JSON is tiny)
-      env: { ...process.env },
-      detached: true, // process group — same tree-kill coverage as the export routes (C8)
-      killSignal: 'SIGKILL',
+    // Raw execFile (not the promisified wrapper) so we hold the ChildProcess
+    // handle: on timeout we must killExportTree — detached:true alone does NOT
+    // kill the tar grandchild, only the node child (Claude v2-C8/C9).
+    const probeResult = await new Promise((resolve, reject) => {
+      const child = execFile('node', [EXPORT_SCRIPT, '--diag-size-probe'], {
+        // Under the diag caller budget (Test 18 curl --max-time 120s): probes
+        // take <= ~30s wall (parallelized), leaving room for the size probe.
+        // Heavy workspaces that exceed this return an error — acceptable for a
+        // diagnostic; the probe result is cached and re-runs are cheap.
+        timeout: 90_000,
+        killSignal: 'SIGKILL',
+        maxBuffer: 1024 * 1024, // 1 MB stdout cap (size JSON is tiny)
+        env: { ...process.env },
+        detached: true, // own process group so killExportTree can reach tar
+      }, (err, stdout, stderr) => {
+        if (err) {
+          err.stdout = stdout; err.stderr = stderr;
+          reject(err);
+        } else {
+          resolve(String(stdout));
+        }
+      });
+      // Tree-kill safety net: 95s — beyond execFile's own 90s timeout (which
+      // sends SIGKILL to the node child only), this takes down the whole
+      // group including any tar grandchild.
+      const treeKill = setTimeout(() => killExportTree(child), 95_000);
+      treeKill.unref();
+      child.once('close', () => clearTimeout(treeKill));
     });
-    const parsed = JSON.parse(stdout.trim());
+    const parsed = JSON.parse(probeResult.trim());
     return {
       ok: parsed.ok !== false,
       sizeBytes: parsed.sizeBytes ?? null,
