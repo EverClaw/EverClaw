@@ -962,21 +962,25 @@ async function handleInternalExport(req, res) {
     return;
   }
 
-  // ── 1b. In-flight guard: one export at a time per container ──
-  if (exportInFlight) {
-    res.writeHead(409, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: 'export_in_progress' }));
-    return;
-  }
-  exportInFlight = true;
-
   // ── 2. Validate upload URL is configured ──
+  // BEFORE the guard: an early return here must not leak the flag
+  // (Claude v2-C2 — push path with unset URL would wedge the shared guard
+  // forever in pull-mode deployments).
   if (!EXPORT_UPLOAD_URL) {
     console.error('[internal-export] AGENT_EXPORT_UPLOAD_URL not set');
     res.writeHead(500, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: 'upload_url_not_configured' }));
     return;
   }
+
+  // ── 1b. In-flight guard: one export at a time per container ──
+  // Acquired ONLY after all synchronous validation passes (C2 fix).
+  if (exportInFlight) {
+    res.writeHead(409, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'export_in_progress' }));
+    return;
+  }
+  exportInFlight = true;
 
   // ── 3. Run export script ──
   const { execFile } = await import('node:child_process');
@@ -1153,6 +1157,11 @@ async function handleInternalExportStart(req, res) {
     maxBuffer: 10 * 1024 * 1024,
     env: { ...process.env },
   }, (err, stdout, _stderr) => {
+    // Stale-callback guard (Claude v2-C2): after the safety-net timeout fires
+    // (responded=true, flag released, child SIGKILLed), this completion callback
+    // still runs. Without this guard it would UNCONDITIONALLY reset the flag —
+    // releasing a NEW export's mutex if one started in the window.
+    if (responded) return;
     responded = true;
     exportInFlight = false;
     stderrTail = String(_stderr || '').split('\n').filter(Boolean).slice(-5).join(' | ').slice(-500);
