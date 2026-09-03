@@ -902,6 +902,8 @@ async function runExportSizeProbe() {
       timeout: 90_000,
       maxBuffer: 1024 * 1024, // 1 MB stdout cap (size JSON is tiny)
       env: { ...process.env },
+      detached: true, // process group — same tree-kill coverage as the export routes (C8)
+      killSignal: 'SIGKILL',
     });
     const parsed = JSON.parse(stdout.trim());
     return {
