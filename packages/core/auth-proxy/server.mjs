@@ -819,7 +819,7 @@ function sweepBundleTokens(now = Date.now()) {
   }
   for (const [token, entry] of expired) {
     bundleTokens.delete(token);
-    unlink(entry.path, () => {});
+    unlink(entry.path).catch(() => {});
   }
 }
 
@@ -830,7 +830,7 @@ function issueBundleToken(bundlePath, sizeBytes) {
     const oldest = bundleTokens.keys().next().value;
     const evicted = bundleTokens.get(oldest);
     bundleTokens.delete(oldest);
-    unlink(evicted.path, () => {});
+    unlink(evicted.path).catch(() => {});
   }
   const token = randomBytes(24).toString('hex');
   bundleTokens.set(token, { path: bundlePath, sizeBytes, expiresAt: Date.now() + BUNDLE_TOKEN_TTL_MS });
@@ -867,7 +867,7 @@ async function sweepStaleExportBundles() {
       if (!isExport && !isMigrate) continue;
       try {
         const s = await stat(join('/tmp', f));
-        if (now - s.mtimeMs > 60 * 60 * 1000) unlink(join('/tmp', f), () => {});
+        if (now - s.mtimeMs > 60 * 60 * 1000) unlink(join('/tmp', f)).catch(() => {});
       } catch { /* race — file gone */ }
     }
   } catch { /* /tmp unreadable — not fatal */ }
@@ -1056,7 +1056,7 @@ async function handleInternalExport(req, res) {
     // failure so the last completed export phase is visible without shell access.
     stderrTail = String(_stderr || '').split('\n').filter(Boolean).slice(-5).join(' | ').slice(-500);
     // Cleanup encrypted bundle from /tmp in all paths (success or failure).
-    unlink(outputPath, () => {});
+    unlink(outputPath).catch(() => {});
 
     if (responded) return; // already sent a response (e.g. timeout handler)
     responded = true;
@@ -1166,7 +1166,7 @@ async function handleInternalExport(req, res) {
       exportInFlight = false;
       console.error('[internal-export] Safety-net timeout fired — killing child tree');
       killExportTree(child);
-      unlink(outputPath, () => {});
+      unlink(outputPath).catch(() => {});
       res.writeHead(504, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'export_timeout' }));
     }
@@ -1231,7 +1231,7 @@ async function handleInternalExportStart(req, res) {
     if (err) {
       const isTimeout = err.killed === true;
       console.error(`[internal/export/start] Export failed: ${isTimeout ? 'timeout' : err.message} | phases: ${stderrTail}`);
-      unlink(outputPath, () => {});
+      unlink(outputPath).catch(() => {});
       if (!res.headersSent) {
         res.writeHead(isTimeout ? 504 : 500, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({
@@ -1249,7 +1249,7 @@ async function handleInternalExportStart(req, res) {
       result = JSON.parse(stdout.trim());
     } catch (parseErr) {
       console.error('[internal/export/start] Failed to parse export stdout:', parseErr.message);
-      unlink(outputPath, () => {});
+      unlink(outputPath).catch(() => {});
       if (!res.headersSent) {
         res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'export_parse_failed', phases: stderrTail || undefined }));
@@ -1260,7 +1260,7 @@ async function handleInternalExportStart(req, res) {
     // Contract: { outputPath, passphrase, bundleChecksum, size }
     if (!result.outputPath || !result.passphrase || typeof result.size !== 'number') {
       console.error('[internal/export/start] Incomplete export result (contract violation)');
-      unlink(outputPath, () => {});
+      unlink(outputPath).catch(() => {});
       if (!res.headersSent) {
         res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'export_incomplete_result' }));
@@ -1273,7 +1273,7 @@ async function handleInternalExportStart(req, res) {
     // child must not turn the bundle route into an arbitrary-file-read.
     if (result.outputPath !== outputPath) {
       console.error('[internal/export/start] Child reported a foreign outputPath — refusing');
-      unlink(outputPath, () => {});
+      unlink(outputPath).catch(() => {});
       if (!res.headersSent) {
         res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'export_path_mismatch' }));
@@ -1306,7 +1306,7 @@ async function handleInternalExportStart(req, res) {
       exportInFlight = false;
       console.error('[internal/export/start] Safety-net timeout fired — killing child tree');
       killExportTree(child);
-      unlink(outputPath, () => {});
+      unlink(outputPath).catch(() => {});
       res.writeHead(504, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'export_timeout' }));
     }
@@ -1351,7 +1351,7 @@ async function handleInternalExportBundle(req, res) {
     return;
   }
   if (entry.expiresAt < Date.now()) {
-    unlink(entry.path, () => {});
+    unlink(entry.path).catch(() => {});
     res.writeHead(410, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: 'token_expired' }));
     return;
@@ -1378,7 +1378,7 @@ async function handleInternalExportBundle(req, res) {
   const cleanup = () => {
     if (cleanedUp) return;
     cleanedUp = true;
-    unlink(entry.path, () => {});
+    unlink(entry.path).catch(() => {});
   };
   stream.on('error', (err) => {
     console.error('[internal/export/bundle] Stream error:', err.message);
