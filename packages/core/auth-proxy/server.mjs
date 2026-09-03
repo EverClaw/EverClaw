@@ -1159,6 +1159,9 @@ async function handleInternalExportStart(req, res) {
   }
   exportInFlight = true;
 
+  // try/catch around acquire→spawn (Claude v2-C5): same hardening as the push
+  // path — a synchronous execFile throw must not wedge the shared guard.
+  try {
   const outputPath = `/tmp/agent-export-${Date.now()}-${randomBytes(4).toString('hex')}.tar.gz.enc`;
   let responded = false;
   let stderrTail = '';
@@ -1266,6 +1269,15 @@ async function handleInternalExportStart(req, res) {
     }
   }, EXPORT_TIMEOUT_MS + 5000);
   timeoutSafety.unref();
+  } catch (spawnErr) {
+    // Sync throw between guard acquire and spawn — release and answer (C5).
+    exportInFlight = false;
+    console.error('[internal/export/start] Spawn failed:', spawnErr?.message || spawnErr);
+    if (!res.headersSent) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'export_spawn_failed' }));
+    }
+  }
 }
 
 // ─── Pull path: GET /internal/export/bundle?token=... ────────────────────────
