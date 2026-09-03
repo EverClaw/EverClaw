@@ -786,10 +786,11 @@ async function handleCigProxy(req, res, url) {
 // It is NEVER stored in any database.
 
 const EXPORT_TIMEOUT_MS_RAW = parseInt(process.env.AGENT_EXPORT_TIMEOUT_MS || '120000', 10);
-// NaN/malformed env guard (Claude v2-C1): NaN would make setTimeout fire
-// immediately (instant safety-net 504) and execFile timeout meaningless.
+// NaN/malformed env guard + ceiling clamp (Claude v2-C10): NaN would make
+// setTimeout fire immediately; an over-large value would break the EF's
+// 130s < 150s invariant from the container side. Ceiling 120s = EF 130s - 10s.
 const EXPORT_TIMEOUT_MS = Number.isFinite(EXPORT_TIMEOUT_MS_RAW) && EXPORT_TIMEOUT_MS_RAW > 0
-  ? EXPORT_TIMEOUT_MS_RAW
+  ? Math.min(EXPORT_TIMEOUT_MS_RAW, 120_000)
   : 120_000;
 // Safety net below adds +5s (125s worst case). The calling Edge Function uses
 // CONTAINER_TIMEOUT_MS = 130s, deliberately larger, so it sees our 5xx/504
@@ -907,6 +908,11 @@ async function runExportSizeProbe() {
         env: { ...process.env },
         detached: true, // own process group so killExportTree can reach tar
       }, (err, stdout, stderr) => {
+        // In-callback tree-kill (Claude v2-C10): execFile's built-in timeout
+        // SIGKILLs only the node child; the 'close' that follows must ALSO
+        // take down the process group (tar grandchild). An external timer
+        // cleared by 'close' would never fire — dead code (C10 catch).
+        if (err?.killed) killExportTree(child);
         if (err) {
           err.stdout = stdout; err.stderr = stderr;
           reject(err);
@@ -914,12 +920,6 @@ async function runExportSizeProbe() {
           resolve(String(stdout));
         }
       });
-      // Tree-kill safety net: 95s — beyond execFile's own 90s timeout (which
-      // sends SIGKILL to the node child only), this takes down the whole
-      // group including any tar grandchild.
-      const treeKill = setTimeout(() => killExportTree(child), 95_000);
-      treeKill.unref();
-      child.once('close', () => clearTimeout(treeKill));
     });
     const parsed = JSON.parse(probeResult.trim());
     return {
@@ -1043,6 +1043,7 @@ async function handleInternalExport(req, res) {
     '--output', outputPath,
   ], {
     timeout: EXPORT_TIMEOUT_MS,
+    killSignal: 'SIGKILL', // instant — matches the safety net; no half-alive window
     maxBuffer: 10 * 1024 * 1024, // 10 MB stdout buffer
     env: { ...process.env, OPENCLAW_BINDING_SECRET: CIG_CONFIG.bindingSecret },
     // Process-group kill (Claude v2-C7): the script spawns tar grandchildren
@@ -1073,10 +1074,9 @@ async function handleInternalExport(req, res) {
           phases: stderrTail || undefined,
         }));
       }
-      // Ensure child is fully cleaned up on timeout
-      if (isTimeout && child.pid) {
-        try { child.kill('SIGKILL'); } catch {}
-      }
+            // Tree-kill on timeout (C10 carryover): mirror the start path — the
+      // group must die with the child, not just the node process.
+      if (isTimeout && child.pid) { killExportTree(child); }
       return;
     }
 
