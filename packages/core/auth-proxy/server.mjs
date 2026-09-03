@@ -950,7 +950,11 @@ async function handleInternalDiag(req, res) {
 
 // Shared binding-secret check for all /internal/* routes (timing-safe).
 function verifyBindingSecret(req) {
-  const provided = req.headers['x-binding-secret'];
+  // Coerce duplicated headers to a single string (Claude v2-C6): Node gives
+  // string[] for repeated headers; Buffer.from(string[]) coerces to garbage
+  // octets (fails closed, but unintended type path).
+  const rawProvided = req.headers['x-binding-secret'];
+  const provided = Array.isArray(rawProvided) ? rawProvided[0] : rawProvided;
   const expected = CIG_CONFIG.bindingSecret;
   if (!provided || !expected) return false;
   const providedBuf = Buffer.from(provided);
@@ -1193,7 +1197,7 @@ async function handleInternalExportStart(req, res) {
         res.writeHead(isTimeout ? 504 : 500, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({
           error: isTimeout ? 'export_timeout' : 'export_failed',
-          detail: isTimeout ? 'Export exceeded 120s limit' : undefined,
+          detail: isTimeout ? `Export exceeded ${Math.round(EXPORT_TIMEOUT_MS / 1000)}s limit` : undefined,
           phases: stderrTail || undefined,
         }));
       }

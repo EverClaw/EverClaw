@@ -38,6 +38,15 @@ const MANIFEST_VERSION = '2.0';
 const MIN_PASSPHRASE_LEN = 16;
 const BUNDLE_NAME_STEM = 'migrate-bundle';
 
+// Child-kill hygiene (Claude v2-C6): the auth-proxy timeouts SIGTERM this node
+// process, but a running spawnSync('tar') grandchild would be reparented to
+// init and keep consuming CPU/disk for up to its own 600s bound — defeating
+// the container's single-export guard. Kill any in-flight tar child on exit
+// signals so the whole tree dies with the parent.
+const _activeTar = new Set();
+process.on('SIGTERM', () => { for (const p of _activeTar) { try { p.kill('SIGKILL'); } catch {} } process.exit(143); });
+process.on('SIGINT', () => { for (const p of _activeTar) { try { p.kill('SIGKILL'); } catch {} } process.exit(130); });
+
 // OpenClaw version pin (David, 2026-08-31): NEVER use @latest —
 // 8.1.2024 is a major unstable change. Probe the source version at export;
 // fall back to the current proven version if the binary is absent.
@@ -594,8 +603,10 @@ export async function exportMigrateBundle(options = {}) {
     const tarArgs = ['-cf', join(stage, 'workspaces.tar'),
       ...EXCLUDES.flatMap(e => ['--exclude', e]),
       '-C', openclawDir, ...workspaces.map(w => w.name)];
-    const wsResult = spawnSync('tar', tarArgs,
+    const wsTar = spawnSync('tar', tarArgs,
       { timeout: 600000 });
+    _activeTar.add(wsTar);
+    const wsResult = wsTar;
     tracePhase('workspaces-tarred');
     if (wsResult.status !== 0) {
       throw new Error(`workspace tar failed (exit ${wsResult.status}): ${wsResult.stderr?.toString()?.slice(0, 500)}`);
@@ -657,8 +668,10 @@ export async function exportMigrateBundle(options = {}) {
 
     // Definitive tar + encrypt to the output path.
     // Use spawnSync for tar (no buffer issue — writes to file).
-    const tarResult = spawnSync('tar', ['-cf', tarPath, '-C', stage, '.'],
+    const bundleTar = spawnSync('tar', ['-cf', tarPath, '-C', stage, '.'],
       { timeout: 600000, maxBuffer: 1024 * 1024 * 1024 * 4 });
+    _activeTar.add(bundleTar);
+    const tarResult = bundleTar;
     tracePhase('bundle-tarred');
     if (tarResult.status !== 0) {
       throw new Error(`bundle tar failed (exit ${tarResult.status}): ${tarResult.stderr?.toString()?.slice(0, 500)}`);
