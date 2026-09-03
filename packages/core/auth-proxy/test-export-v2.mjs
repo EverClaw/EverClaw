@@ -215,6 +215,32 @@ describe('Download Agent v2 pull-path routes', () => {
     assert.ok(!proxyStderr.includes(PASSPHRASE), 'passphrase not in stderr');
   });
 
+  // === Finding 6 (R2 MAJOR): size equality across probe, start, and bundle ===
+  // Runs early (before abort/spawn tests) to avoid in-flight guard contention.
+  it('exportSizeProbe.sizeBytes == start.sizeBytes == actual bundle bytes', async () => {
+    // Get the diag size probe first (clears the in-flight guard)
+    const diag = await fetch(`${base()}/internal/diag`, {
+      headers: { 'x-binding-secret': BINDING_SECRET },
+    });
+    const diagBody = await diag.json();
+    assert.ok(diagBody.exportSizeProbe?.ok, 'exportSizeProbe succeeded');
+    const probeSize = diagBody.exportSizeProbe.sizeBytes;
+
+    // Start a real export
+    const start = await fetch(`${base()}/internal/export/start`, startOpts);
+    const { bundleToken, sizeBytes } = await start.json();
+
+    // Fetch the bundle and count actual bytes
+    const res = await fetch(`${base()}/internal/export/bundle?token=${bundleToken}`, {
+      headers: { 'x-binding-secret': BINDING_SECRET },
+    });
+    const buf = Buffer.from(await res.arrayBuffer());
+
+    assert.equal(probeSize, sizeBytes, 'probe size == start size');
+    assert.equal(buf.length, sizeBytes, 'start size == actual streamed bytes');
+    assert.equal(buf.length, probeSize, 'probe size == actual streamed bytes');
+  });
+
   // === Finding 2: explicit timingSafeEqual tests (BLOCKING) ===
   it('verifyBindingSecret rejects wrong length', async () => {
     const res = await fetch(`${base()}/internal/diag`, {
@@ -363,6 +389,54 @@ describe('Download Agent v2 pull-path routes', () => {
     const r2 = await fetch(`${base()}/internal/export/start`, startOpts);
     assert.equal(r2.status, 200, 'guard released after first start completes');
     await r2.json();
+  });
+
+  // === Finding 7 (R2 MAJOR): token TTL expiry returns 410 ===
+  it('expired token returns 410 (TTL enforced)', async () => {
+    // Spawn a separate proxy with BUNDLE_TOKEN_TTL_MS=100 (100ms TTL)
+    const { generateKeyPairSync } = await import('node:crypto');
+    const { publicKey } = generateKeyPairSync('ec', { namedCurve: 'P-256' });
+    const publicKeyPem = publicKey.export({ type: 'spki', format: 'pem' });
+    const shortLivedPort = 19892;
+    const env = {
+      ...process.env,
+      AUTH_PROXY_PORT: String(shortLivedPort),
+      OPENCLAW_INTERNAL_PORT: String(19893),
+      PRIVY_APP_ID: 'test-privy-app',
+      PRIVY_VERIFICATION_KEY: publicKeyPem,
+      OPENCLAW_OWNER_PRIVY_ID: 'did:privy:test-owner',
+      SESSION_SECRET: 'test-session-secret-0123456789abcdef-0123456789',
+      CIG_BINDING_SECRET: BINDING_SECRET,
+      CIG_MINT_URL: 'http://127.0.0.1:19900/mint',
+      CIG_INFERENCE_URL: 'http://127.0.0.1:19900/v1',
+      AGENT_EXPORT_SCRIPT: FAKE_EXPORTER,
+      AGENT_EXPORT_TIMEOUT_MS: '10000',
+      BUNDLE_TOKEN_TTL_MS: '100', // 100ms TTL for fast test
+      FAKE_EXPORT_PASSPHRASE: PASSPHRASE,
+      HOME: fakeHome,
+      USER: 'testuser',
+    };
+    const child = spawn('node', [SERVER], { cwd: __dirname, env, stdio: ['pipe', 'pipe', 'pipe'] });
+    try {
+      for (let i = 0; i < 50; i++) {
+        try {
+          const r = await fetch(`http://127.0.0.1:${shortLivedPort}/health`);
+          if (r.ok) break;
+        } catch { /* not up yet */ }
+        await new Promise(r => setTimeout(r, 200));
+      }
+      const s = await fetch(`http://127.0.0.1:${shortLivedPort}/internal/export/start`, {
+        method: 'POST', headers: { 'x-binding-secret': BINDING_SECRET, 'Content-Type': 'application/json' }, body: '{}',
+      });
+      const { bundleToken } = await s.json();
+      await new Promise(r => setTimeout(r, 200)); // wait for TTL to expire
+      const res = await fetch(`http://127.0.0.1:${shortLivedPort}/internal/export/bundle?token=${bundleToken}`, {
+        headers: { 'x-binding-secret': BINDING_SECRET },
+      });
+      assert.equal(res.status, 410, 'expired token returns 410');
+    } finally {
+      child.kill('SIGKILL');
+    }
   });
 
   // === Finding 4: timeout ceiling is bounded (BLOCKING) ===

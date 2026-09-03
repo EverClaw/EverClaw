@@ -11,6 +11,25 @@ import { writeFileSync, readFileSync, statSync } from 'node:fs';
 import { createCipheriv, scryptSync, randomBytes, createHash } from 'node:crypto';
 
 const PASSPHRASE = process.env.FAKE_EXPORT_PASSPHRASE || 'correct-horse-battery-staple-2026';
+
+// --diag-size-probe: return size-only JSON without writing a file (mirrors
+// the real migrate-export.mjs --diag-size-probe path).
+if (process.argv.includes('--diag-size-probe')) {
+  // Build the same payload to measure its size, but don't write it.
+  const payload = Buffer.concat([
+    Buffer.from('FAKE-EXPORT-PAYLOAD-v2\n'),
+    Buffer.alloc(64 * 1024 - 23, 0x41),
+  ]);
+  const salt = randomBytes(16);
+  const iv = randomBytes(12);
+  const key = scryptSync(PASSPHRASE, salt, 32, { N: 16384, r: 8, p: 1 });
+  const cipher = createCipheriv('aes-256-gcm', key, iv);
+  const enc = Buffer.concat([cipher.update(payload), cipher.final()]);
+  const bundle = Buffer.concat([salt, iv, enc, cipher.getAuthTag()]);
+  process.stdout.write(JSON.stringify({ ok: true, sizeBytes: bundle.length, error: null }) + '\n');
+  process.exit(0);
+}
+
 const i = process.argv.indexOf('--output');
 const outputPath = process.argv[i + 1];
 

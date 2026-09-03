@@ -800,14 +800,16 @@ const EXPORT_TIMEOUT_MS = Number.isFinite(EXPORT_TIMEOUT_MS_RAW) && EXPORT_TIMEO
 //   auth-proxy is at /opt/everclaw/auth-proxy/server.mjs
 //   migrate-export.mjs is at /opt/everclaw/skill/scripts/migrate-export.mjs
 // Relative path: ../skill/scripts/migrate-export.mjs
-const EXPORT_SCRIPT = join(__dirname, '..', 'skill', 'scripts', 'migrate-export.mjs');
+// Test hook: point EXPORT_SCRIPT at a hermetic fake exporter (no real export
+// in tests). Override must never be set via untrusted input (fixed env only).
+const EXPORT_SCRIPT = process.env.AGENT_EXPORT_SCRIPT || join(__dirname, '..', 'skill', 'scripts', 'migrate-export.mjs');
 const EXPORT_UPLOAD_URL = process.env.AGENT_EXPORT_UPLOAD_URL || ''; // Edge Function URL for bundle upload
 
 // ─── Pull-path bundle tokens (single-use, memory-only) ─────────────────────
 // /internal/export/start issues a token; /internal/export/bundle consumes it
 // exactly once and streams the file. Tokens expire after 10 min. The bundle
 // file is deleted after transfer (success, failure, timeout, or expiry).
-const BUNDLE_TOKEN_TTL_MS = 10 * 60_000;
+const BUNDLE_TOKEN_TTL_MS = parseInt(process.env.BUNDLE_TOKEN_TTL_MS || (10 * 60_000).toString(), 10);
 const BUNDLE_TOKEN_MAX = 32; // bounded map — exports are rare
 const bundleTokens = new Map(); // token -> { path, sizeBytes, expiresAt }
 
