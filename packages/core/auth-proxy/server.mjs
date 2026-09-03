@@ -787,7 +787,12 @@ async function handleCigProxy(req, res, url) {
 // The passphrase is returned to the Edge Function and then to the Dashboard.
 // It is NEVER stored in any database.
 
-const EXPORT_TIMEOUT_MS = parseInt(process.env.AGENT_EXPORT_TIMEOUT_MS || '120000', 10); // 120s default; env-overridable for containers with heavy workspaces (must stay < the Edge Function's 130s container budget — see agent-export/index.ts)
+const EXPORT_TIMEOUT_MS_RAW = parseInt(process.env.AGENT_EXPORT_TIMEOUT_MS || '120000', 10);
+// NaN/malformed env guard (Claude v2-C1): NaN would make setTimeout fire
+// immediately (instant safety-net 504) and execFile timeout meaningless.
+const EXPORT_TIMEOUT_MS = Number.isFinite(EXPORT_TIMEOUT_MS_RAW) && EXPORT_TIMEOUT_MS_RAW > 0
+  ? EXPORT_TIMEOUT_MS_RAW
+  : 120_000;
 // Safety net below adds +5s (125s worst case). The calling Edge Function uses
 // CONTAINER_TIMEOUT_MS = 130s, deliberately larger, so it sees our 5xx/504
 // response before ITS timeout fires. Keep in sync — see
@@ -853,7 +858,7 @@ async function sweepStaleExportBundles() {
     }
   } catch { /* /tmp unreadable — not fatal */ }
 }
-sweepStaleExportBundles();
+void sweepStaleExportBundles();
 
 // ─── Single in-flight export guard (push + pull share it) ───────────────────
 // Parallel exports would double CPU/tar work on a shared container. A second
@@ -865,10 +870,21 @@ const DIAG_CACHE_TTL_MS = 5 * 60_000;
 let diagCache = { at: 0, payload: null, inflight: null };
 
 async function runExportSizeProbe() {
+  // Gate on the SAME in-flight guard as real exports (Claude v2-C1 blocking):
+  // a size probe IS a full export — running it concurrently with a real export
+  // would double tar work + memory on a constrained container.
+  if (exportInFlight) {
+    return { ok: false, sizeBytes: null, elapsedMs: 0, error: 'export_in_progress' };
+  }
+  exportInFlight = true;
   const t0 = Date.now();
   try {
     const { stdout } = await execFileP('node', [EXPORT_SCRIPT, '--diag-size-probe'], {
-      timeout: 240_000, // heavy workspaces can take minutes on first probe (cached 5 min after)
+      // Under the diag caller budget (Test 18 curl --max-time 120s): probes
+      // take <= ~30s wall (parallelized), leaving room for the size probe.
+      // Heavy workspaces that exceed this return an error — acceptable for a
+      // diagnostic; the probe result is cached and re-runs are cheap.
+      timeout: 90_000,
       maxBuffer: 1024 * 1024, // 1 MB stdout cap (size JSON is tiny)
       env: { ...process.env },
     });
@@ -881,6 +897,8 @@ async function runExportSizeProbe() {
     };
   } catch (err) {
     return { ok: false, sizeBytes: null, elapsedMs: Date.now() - t0, error: String(err.message || err).slice(0, 200) };
+  } finally {
+    exportInFlight = false;
   }
 }
 

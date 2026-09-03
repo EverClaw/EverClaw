@@ -130,21 +130,42 @@ async function httpStatus(url, method, body, timeoutMs, extraHeaders) {
  * Returns: array of probe result objects (see module header).
  */
 export async function runEgressProbes() {
-  const results = [];
+  // Independent probes run in parallel (Claude v2-C1: worst-case wall time was
+  // the sequential sum of all bounds ~80s+; parallelized it is ~20s). The TCP
+  // probe depends on DNS results, so it runs after the DNS pair resolves.
+  const [dnsSupabase, dnsControl, httpGetSupabase, postEmpty, cliff, storagePut, control] = await Promise.all([
+    probe('dns-supabase', async () => {
+      const addrs = await dnsLookup(SUPABASE_HOST, DNS_TIMEOUT_MS);
+      return { addresses: addrs.map(a => a.address).slice(0, 4) };
+    }),
+    probe('dns-control', async () => {
+      const addrs = await dnsLookup('inference.installopenclaw.xyz', DNS_TIMEOUT_MS);
+      return { addresses: addrs.map(a => a.address).slice(0, 4) };
+    }),
+    probe('http-get-supabase', async () =>
+      httpStatus(`${FUNCTIONS_BASE}/`, 'GET', null, HTTP_GET_TIMEOUT_MS)),
+    probe('http-post-empty-upload', async () =>
+      httpStatus(`${FUNCTIONS_BASE}${UPLOAD_PATH}`, 'POST', null, HTTP_POST_EMPTY_TIMEOUT_MS)),
+    // 1 MB to functions gateway: EXPECT hang (documents the cliff)
+    probe('http-post-1mb-upload', async () => {
+      const body = Buffer.alloc(CLIFF_BYTES, 0x1f);
+      return httpStatus(`${FUNCTIONS_BASE}${UPLOAD_PATH}`, 'POST', body, HTTP_POST_CLIFF_TIMEOUT_MS);
+    }),
+    // 5 MB PUT to storage object path: EXPECT fast reject without auth —
+    // proves the storage gateway answers large bodies (direct-upload path).
+    probe('http-put-5mb-storage', async () => {
+      const body = Buffer.alloc(STORAGE_PUT_BYTES, 0x1f);
+      const rand = randomBytes(4).toString('hex');
+      const storageUrl = `${FUNCTIONS_BASE}/storage/v1/object/agent-exports/egress-probe-${rand}.bin`;
+      return httpStatus(storageUrl, 'PUT', body, HTTP_PUT_STORAGE_TIMEOUT_MS);
+    }),
+    probe('http-get-control', async () =>
+      httpStatus(`${CONTROL_BASE}/`, 'GET', null, HTTP_GET_TIMEOUT_MS)),
+  ]);
 
-  // 1 + 2. DNS
-  results.push(await probe('dns-supabase', async () => {
-    const addrs = await dnsLookup(SUPABASE_HOST, DNS_TIMEOUT_MS);
-    return { addresses: addrs.map(a => a.address).slice(0, 4) };
-  }));
+  const results = [dnsSupabase, dnsControl];
 
-  results.push(await probe('dns-control', async () => {
-    const addrs = await dnsLookup('inference.installopenclaw.xyz', DNS_TIMEOUT_MS);
-    return { addresses: addrs.map(a => a.address).slice(0, 4) };
-  }));
-
-  // 3. TCP connect to first IPv4 of supabase.co
-  const dnsSupabase = results[0];
+  // 3. TCP connect to first IPv4 of supabase.co (needs the DNS result)
   const firstV4 = dnsSupabase.ok
     ? (dnsSupabase.addresses || []).find(a => !a.includes(':'))
     : null;
@@ -153,37 +174,6 @@ export async function runEgressProbes() {
     return tcpConnect(firstV4, 443, TCP_TIMEOUT_MS);
   }));
 
-  // 4. HTTPS GET functions base (any status = HTTP egress works)
-  results.push(await probe('http-get-supabase', async () =>
-    httpStatus(`${FUNCTIONS_BASE}/`, 'GET', null, HTTP_GET_TIMEOUT_MS)));
-
-  // 5. HTTPS POST empty body, no auth → our upload function answers 401 fast
-  results.push(await probe('http-post-empty-upload', async () =>
-    httpStatus(`${FUNCTIONS_BASE}${UPLOAD_PATH}`, 'POST', null, HTTP_POST_EMPTY_TIMEOUT_MS)));
-
-  // 6. HTTPS POST 1 MB body, no auth → functions-gateway large-body cliff.
-  // Confirmed 2026-09-02: the functions gateway hangs forever on bodies
-  // ≥ ~1 MB (cliff between 512 KB and 1 MB), from ANY client. A timeout here
-  // is the EXPECTED, informative result — it proves push-upload is impossible.
-  results.push(await probe('http-post-1mb-upload', async () => {
-    const body = Buffer.alloc(CLIFF_BYTES, 0x1f);
-    return httpStatus(`${FUNCTIONS_BASE}${UPLOAD_PATH}`, 'POST', body, HTTP_POST_CLIFF_TIMEOUT_MS);
-  }));
-
-  // 7. HTTPS PUT 5 MB to a storage object path, no auth → storage gateway
-  // answers large bodies fast (401/400 on bad/absent token). Validates the
-  // direct-to-storage upload path as an alternative to the functions gateway.
-  results.push(await probe('http-put-5mb-storage', async () => {
-    const body = Buffer.alloc(STORAGE_PUT_BYTES, 0x1f);
-    const rand = randomBytes(4).toString('hex');
-    const storageUrl = `${FUNCTIONS_BASE}/storage/v1/object/agent-exports/egress-probe-${rand}.bin`;
-    return httpStatus(storageUrl, 'PUT', body, HTTP_PUT_STORAGE_TIMEOUT_MS);
-  }));
-
-  // 8. Control: CIG host. NOTE: resolves only inside the Manifest container
-  // network — ENOTFOUND from external hosts is expected, not a container fault.
-  results.push(await probe('http-get-control', async () =>
-    httpStatus(`${CONTROL_BASE}/`, 'GET', null, HTTP_GET_TIMEOUT_MS)));
-
+  results.push(httpGetSupabase, postEmpty, cliff, storagePut, control);
   return results;
 }
