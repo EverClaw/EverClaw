@@ -119,6 +119,7 @@ WORKDIR /auth-proxy
 # Copy auth proxy files from the build context (monorepo: packages/core/auth-proxy/)
 COPY packages/core/auth-proxy/package.json packages/core/auth-proxy/package-lock.json* ./
 COPY packages/core/auth-proxy/server.mjs ./
+COPY packages/core/auth-proxy/egress-probes.mjs ./
 COPY packages/core/auth-proxy/login.html ./
 COPY packages/core/auth-proxy/login-app.jsx ./
 COPY packages/core/auth-proxy/build-login.mjs ./
