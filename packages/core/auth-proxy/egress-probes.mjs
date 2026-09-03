@@ -108,8 +108,9 @@ function tcpConnect(host, port, timeoutMs) {
   });
 }
 
-async function httpStatus(url, method, body, timeoutMs, extraHeaders) {
-  const resp = await fetch(url, {
+async function httpStatus(url, method, body, timeoutMs, extraHeaders, _fetch) {
+  const f = _fetch || fetch;
+  const resp = await f(url, {
     method,
     headers: extraHeaders || {},
     body: body ?? undefined,
@@ -128,39 +129,54 @@ async function httpStatus(url, method, body, timeoutMs, extraHeaders) {
 /**
  * Run all egress probes sequentially. Never throws.
  * Returns: array of probe result objects (see module header).
+ *
+ * @param {object} [deps] — Optional dependency injection for hermetic tests.
+ *        When provided, replaces real dns/connect/fetch/randomBytes.
+ *        { lookup, connect, fetch, randomBytes }
  */
-export async function runEgressProbes() {
+export async function runEgressProbes(deps) {
+  const _lookup = deps?.lookup || lookup;
+  const _connect = deps?.connect || connect;
+  const _fetch = deps?.fetch || fetch;
+  const _randomBytes = deps?.randomBytes || randomBytes;
+
+  // Internal helper to use the injected lookup
+  const _dnsLookup = async (host, timeoutMs) => {
+    const result = await _lookup(host, { all: true, verbatim: true, signal: timeoutSignal(timeoutMs) });
+    return Array.isArray(result) ? result : (result?.address ? [result] : []);
+  };
+
   // Independent probes run in parallel (Claude v2-C1: worst-case wall time was
   // the sequential sum of all bounds ~80s+; parallelized it is ~20s). The TCP
   // probe depends on DNS results, so it runs after the DNS pair resolves.
   const [dnsSupabase, dnsControl, httpGetSupabase, postEmpty, cliff, storagePut, control] = await Promise.all([
     probe('dns-supabase', async () => {
-      const addrs = await dnsLookup(SUPABASE_HOST, DNS_TIMEOUT_MS);
-      return { addresses: addrs.map(a => a.address).slice(0, 4) };
+      const addrs = await _dnsLookup(SUPABASE_HOST, DNS_TIMEOUT_MS);
+      return { addresses: addrs.map(a => a.address || a).slice(0, 4) };
     }),
     probe('dns-control', async () => {
-      const addrs = await dnsLookup('inference.installopenclaw.xyz', DNS_TIMEOUT_MS);
-      return { addresses: addrs.map(a => a.address).slice(0, 4) };
+      const addrs = await _dnsLookup('inference.installopenclaw.xyz', DNS_TIMEOUT_MS);
+      return { addresses: addrs.map(a => a.address || a).slice(0, 4) };
     }),
     probe('http-get-supabase', async () =>
-      httpStatus(`${FUNCTIONS_BASE}/`, 'GET', null, HTTP_GET_TIMEOUT_MS)),
+      httpStatus(`${FUNCTIONS_BASE}/`, 'GET', null, HTTP_GET_TIMEOUT_MS, {}, _fetch)),
     probe('http-post-empty-upload', async () =>
-      httpStatus(`${FUNCTIONS_BASE}${UPLOAD_PATH}`, 'POST', null, HTTP_POST_EMPTY_TIMEOUT_MS)),
+      httpStatus(`${FUNCTIONS_BASE}${UPLOAD_PATH}`, 'POST', null, HTTP_POST_EMPTY_TIMEOUT_MS, {}, _fetch)),
     // 1 MB to functions gateway: EXPECT hang (documents the cliff)
     probe('http-post-1mb-upload', async () => {
       const body = Buffer.alloc(CLIFF_BYTES, 0x1f);
-      return httpStatus(`${FUNCTIONS_BASE}${UPLOAD_PATH}`, 'POST', body, HTTP_POST_CLIFF_TIMEOUT_MS);
+      return httpStatus(`${FUNCTIONS_BASE}${UPLOAD_PATH}`, 'POST', body, HTTP_POST_CLIFF_TIMEOUT_MS, {}, _fetch);
     }),
     // 5 MB PUT to storage object path: EXPECT fast reject without auth —
     // proves the storage gateway answers large bodies (direct-upload path).
     probe('http-put-5mb-storage', async () => {
       const body = Buffer.alloc(STORAGE_PUT_BYTES, 0x1f);
-      const rand = randomBytes(4).toString('hex');
+      const rand = _randomBytes(4).toString('hex');
       const storageUrl = `${FUNCTIONS_BASE}/storage/v1/object/agent-exports/egress-probe-${rand}.bin`;
-      return httpStatus(storageUrl, 'PUT', body, HTTP_PUT_STORAGE_TIMEOUT_MS);
+      return httpStatus(storageUrl, 'PUT', body, HTTP_PUT_STORAGE_TIMEOUT_MS, {}, _fetch);
     }),
     probe('http-get-control', async () =>
-      httpStatus(`${CONTROL_BASE}/`, 'GET', null, HTTP_GET_TIMEOUT_MS)),
+      httpStatus(`${CONTROL_BASE}/`, 'GET', null, HTTP_GET_TIMEOUT_MS, {}, _fetch)),
   ]);
 
   const results = [dnsSupabase, dnsControl];
@@ -171,6 +187,7 @@ export async function runEgressProbes() {
     : null;
   results.push(await probe('tcp-supabase-443', async () => {
     if (!firstV4) throw new Error('no IPv4 address from DNS probe');
+    if (deps?.connect) return deps.connect(firstV4, 443, TCP_TIMEOUT_MS);
     return tcpConnect(firstV4, 443, TCP_TIMEOUT_MS);
   }));
 
