@@ -842,6 +842,16 @@ function issueBundleToken(bundlePath, sizeBytes) {
 const bundleSweepTimer = setInterval(() => sweepBundleTokens(), 60_000);
 bundleSweepTimer.unref();
 
+// Process-group kill (Claude v2-C7): execFile(detached:true) gives the export
+// child its own process group. Negative-pid SIGKILL takes down the node child
+// AND any tar grandchildren it spawned — a bare child.kill() leaves the
+// grandchild reparented and running for up to its own 600s bound.
+function killExportTree(child) {
+  if (!child?.pid) return;
+  try { process.kill(-child.pid, 'SIGKILL'); } catch { /* group already gone */ }
+  try { child.kill('SIGKILL'); } catch {}
+}
+
 // Startup sweeper (Grok v2-R1): a crashed/incomplete export can leave an
 // agent-export-*.tar.gz.enc file in /tmp. Fresh exports finish in minutes and
 // bundle tokens live 10 min, so anything older than 1 h is orphaned garbage.
@@ -850,7 +860,12 @@ async function sweepStaleExportBundles() {
     const files = await readdir('/tmp');
     const now = Date.now();
     for (const f of files) {
-      if (!f.startsWith('agent-export-') || !f.endsWith('.tar.gz.enc')) continue;
+      // Two name families (Claude v2-C7): auth-proxy route outputs use
+      // agent-export-*, while migrate-export's own default (used by
+      // --diag-size-probe when no --output is passed) uses migrate-bundle-*.
+      const isExport = f.startsWith('agent-export-') && f.endsWith('.tar.gz.enc');
+      const isMigrate = f.startsWith('migrate-bundle-') && f.endsWith('.tar.gz.enc');
+      if (!isExport && !isMigrate) continue;
       try {
         const s = await stat(join('/tmp', f));
         if (now - s.mtimeMs > 60 * 60 * 1000) unlink(join('/tmp', f), () => {});
@@ -1012,6 +1027,11 @@ async function handleInternalExport(req, res) {
     timeout: EXPORT_TIMEOUT_MS,
     maxBuffer: 10 * 1024 * 1024, // 10 MB stdout buffer
     env: { ...process.env, OPENCLAW_BINDING_SECRET: CIG_CONFIG.bindingSecret },
+    // Process-group kill (Claude v2-C7): the script spawns tar grandchildren
+    // synchronously; killing only the node child would leave tar reparented
+    // and running for up to its own 600s bound. detached:true puts the child
+    // in its own process group so killExportTree below can SIGKILL everything.
+    detached: true,
   }, (err, stdout, _stderr) => {
     // Phase-trace tail for diagnostics (bounded) — surfaced to the caller on
     // failure so the last completed export phase is visible without shell access.
@@ -1126,8 +1146,8 @@ async function handleInternalExport(req, res) {
     if (!responded && !res.headersSent) {
       responded = true;
       exportInFlight = false;
-      console.error('[internal-export] Safety-net timeout fired — killing child');
-      if (child.pid) { try { child.kill('SIGKILL'); } catch {} }
+      console.error('[internal-export] Safety-net timeout fired — killing child tree');
+      killExportTree(child);
       unlink(outputPath, () => {});
       res.writeHead(504, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'export_timeout' }));
@@ -1179,6 +1199,7 @@ async function handleInternalExportStart(req, res) {
     timeout: EXPORT_TIMEOUT_MS,
     maxBuffer: 10 * 1024 * 1024,
     env: { ...process.env },
+    detached: true, // process group for tree-kill (Claude v2-C7) — see push path
   }, (err, stdout, _stderr) => {
     // Stale-callback guard (Claude v2-C2): after the safety-net timeout fires
     // (responded=true, flag released, child SIGKILLed), this completion callback
@@ -1201,7 +1222,7 @@ async function handleInternalExportStart(req, res) {
           phases: stderrTail || undefined,
         }));
       }
-      if (isTimeout && child.pid) { try { child.kill('SIGKILL'); } catch {} }
+      if (isTimeout && child.pid) { killExportTree(child); }
       return;
     }
 
@@ -1265,8 +1286,8 @@ async function handleInternalExportStart(req, res) {
     if (!responded && !res.headersSent) {
       responded = true;
       exportInFlight = false;
-      console.error('[internal/export/start] Safety-net timeout fired — killing child');
-      if (child.pid) { try { child.kill('SIGKILL'); } catch {} }
+      console.error('[internal/export/start] Safety-net timeout fired — killing child tree');
+      killExportTree(child);
       unlink(outputPath, () => {});
       res.writeHead(504, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'export_timeout' }));

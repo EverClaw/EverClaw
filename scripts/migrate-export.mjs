@@ -37,15 +37,13 @@ import { pipeline } from 'node:stream/promises';
 const MANIFEST_VERSION = '2.0';
 const MIN_PASSPHRASE_LEN = 16;
 const BUNDLE_NAME_STEM = 'migrate-bundle';
-
-// Child-kill hygiene (Claude v2-C6): the auth-proxy timeouts SIGTERM this node
-// process, but a running spawnSync('tar') grandchild would be reparented to
-// init and keep consuming CPU/disk for up to its own 600s bound — defeating
-// the container's single-export guard. Kill any in-flight tar child on exit
-// signals so the whole tree dies with the parent.
-const _activeTar = new Set();
-process.on('SIGTERM', () => { for (const p of _activeTar) { try { p.kill('SIGKILL'); } catch {} } process.exit(143); });
-process.on('SIGINT', () => { for (const p of _activeTar) { try { p.kill('SIGKILL'); } catch {} } process.exit(130); });
+// NOTE (Claude v2-C7): tar-grandchild orphan cleanup is handled by the
+// auth-proxy via process-group kill (execFile detached:true + kill(-pid)),
+// NOT by signal handlers here — a spawnSync blocks the event loop, so a JS
+// handler can never run mid-tar, and the proxy's safety-net SIGKILL is
+// uncatchable anyway. Do not re-add in-process signal handlers.
+// Orphaned bundles (SIGKILL mid-tar) are cleaned by the proxy's startup
+// sweeper, which matches BOTH agent-export-* and migrate-bundle-* names.
 
 // OpenClaw version pin (David, 2026-08-31): NEVER use @latest —
 // 8.1.2024 is a major unstable change. Probe the source version at export;
@@ -605,7 +603,6 @@ export async function exportMigrateBundle(options = {}) {
       '-C', openclawDir, ...workspaces.map(w => w.name)];
     const wsTar = spawnSync('tar', tarArgs,
       { timeout: 600000 });
-    _activeTar.add(wsTar);
     const wsResult = wsTar;
     tracePhase('workspaces-tarred');
     if (wsResult.status !== 0) {
@@ -670,7 +667,6 @@ export async function exportMigrateBundle(options = {}) {
     // Use spawnSync for tar (no buffer issue — writes to file).
     const bundleTar = spawnSync('tar', ['-cf', tarPath, '-C', stage, '.'],
       { timeout: 600000, maxBuffer: 1024 * 1024 * 1024 * 4 });
-    _activeTar.add(bundleTar);
     const tarResult = bundleTar;
     tracePhase('bundle-tarred');
     if (tarResult.status !== 0) {
