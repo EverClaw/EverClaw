@@ -119,6 +119,7 @@ WORKDIR /auth-proxy
 # Copy auth proxy files from the build context (monorepo: packages/core/auth-proxy/)
 COPY packages/core/auth-proxy/package.json packages/core/auth-proxy/package-lock.json* ./
 COPY packages/core/auth-proxy/server.mjs ./
+COPY packages/core/auth-proxy/egress-probes.mjs ./
 COPY packages/core/auth-proxy/login.html ./
 COPY packages/core/auth-proxy/login-app.jsx ./
 COPY packages/core/auth-proxy/build-login.mjs ./
@@ -199,8 +200,17 @@ ENV BRAVE_PATH="/usr/bin/brave-browser" \
     BRAVE_FLAGS="--headless=new --no-sandbox --disable-dev-shm-usage --disable-gpu"
 
 # ─── Install Whisper (speech-to-text, CPU-only torch, model downloads on demand)
-RUN pip3 install --no-cache-dir --break-system-packages \
-    torch --index-url https://download.pytorch.org/whl/cpu \
+# Pin torch to a known-good CPU wheel. The PyTorch CPU index moved to
+# torch 2.14.0+cpu whose metadata has no prebuilt cp311 wheel (source build
+# fails: flit_core<4 unavailable on the isolated index) — broke CI 2026-09-02.
+# torch 2.3.1 has stable manylinux cp311 wheels on the CPU index.
+# Preinstall typing-extensions from PyPI: pip 23.0.1 (bookworm) discards the
+# PyTorch-index copy due to PEP 503 name normalization (typing_extensions vs
+# typing-extensions), then falls back to an sdist build that needs flit_core
+# which the pytorch-only index cannot provide.
+RUN pip3 install --no-cache-dir --break-system-packages typing-extensions \
+    && pip3 install --no-cache-dir --break-system-packages \
+    torch==2.3.1 --index-url https://download.pytorch.org/whl/cpu \
     && pip3 install --no-cache-dir --break-system-packages \
     --extra-index-url https://download.pytorch.org/whl/cpu \
     openai-whisper

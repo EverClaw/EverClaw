@@ -669,6 +669,18 @@ if [ -n "${PRIVY_APP_ID:-}" ] && [ -n "${PRIVY_VERIFICATION_KEY:-}" ] && [ -n "$
   AUTH_PROXY_SCRIPT="/opt/everclaw/auth-proxy/server.mjs"
   if [ -f "$AUTH_PROXY_SCRIPT" ]; then
     echo "🚀 Starting auth proxy on :18789..."
+
+    # Set AGENT_EXPORT_UPLOAD_URL for the /internal/export route.
+    # The auth-proxy uses this to tell migrate-export.mjs where to upload the bundle.
+    # Format: https://<supabase-project>.supabase.co/functions/v1/agent-export-upload
+    if [ -n "${AGENT_EXPORT_UPLOAD_URL:-}" ]; then
+      echo "   Agent export upload URL: ${AGENT_EXPORT_UPLOAD_URL}"
+    else
+      # Default to the production Supabase endpoint
+      export AGENT_EXPORT_UPLOAD_URL="https://lqmzlflbhitipergiwjo.supabase.co/functions/v1/agent-export-upload"
+      echo "   Agent export upload URL: (default) ${AGENT_EXPORT_UPLOAD_URL}"
+    fi
+
     node "$AUTH_PROXY_SCRIPT" &
     AUTH_PROXY_PID=$!
 
