@@ -47,7 +47,16 @@ const KEY_REQUEST_WINDOW_MS = 60 * 1000;
 const KEY_REQUEST_MAX_PER_WINDOW = 10;
 const ipRequestCounts = new Map();
 
-function checkIpRateLimit(ip) {
+async function checkIpRateLimit(ip) {
+  // Prefer Redis so the limit survives restarts and is shared across instances.
+  if (redis) {
+    const key = `ratelimit:keys:${ip}`;
+    const count = await redis.incr(key);
+    if (count === 1) {
+      await redis.expire(key, Math.ceil(KEY_REQUEST_WINDOW_MS / 1000));
+    }
+    return count <= KEY_REQUEST_MAX_PER_WINDOW;
+  }
   const now = Date.now();
   const entry = ipRequestCounts.get(ip);
   if (!entry || now - entry.windowStart > KEY_REQUEST_WINDOW_MS) {
@@ -102,9 +111,9 @@ const genClaimCode = () => `EVER-${randomBytes(8).toString("hex").toUpperCase()}
 app.get("/health", (req, res) => res.json({ status: "ok" }));
 
 // Request or renew an API key
-app.post("/api/keys/request", (req, res) => {
+app.post("/api/keys/request", async (req, res) => {
   const clientIp = req.ip || req.socket.remoteAddress;
-  if (!checkIpRateLimit(clientIp)) {
+  if (!(await checkIpRateLimit(clientIp))) {
     return res.status(429).json({
       error: "too many requests",
       retry_after_seconds: Math.ceil(KEY_REQUEST_WINDOW_MS / 1000),
