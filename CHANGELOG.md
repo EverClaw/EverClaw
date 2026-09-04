@@ -2,9 +2,45 @@
 
 All notable changes to EverClaw are documented here.
 
-## [Unreleased] - 2026-09-02
+## [Unreleased] - 2026-09-04
 
-### Added — Download Agent (Phase 2 Direct): Dashboard button → encrypted bundle → signed URL
+### Added — Download Agent v2 (Egress-Proof Pull Path): Container → Edge Function → signed URL
+
+Replaces the push-path (container → Supabase) with a pull-path that works regardless of container egress policy. The Supabase Edge Functions gateway hangs on request bodies >= ~1 MB, blocking the old push path. The pull path reverses the direction: Edge Function fetches the bundle from the container via a single-use token, then uploads to Storage.
+
+**New auth-proxy routes:**
+
+- **`GET /internal/diag` (binding secret):** Bounded egress diagnostics — 8 probes (DNS, TCP, HTTP GET/POST, large POST, Storage PUT, control host, export size probe). Results cached 5 min. Read-only, no side effects.
+- **`POST /internal/export/start` (binding secret):** Runs `migrate-export.mjs --agentic` (no upload). Returns `{ bundleToken, sizeBytes, passphrase, expiresAt }`. Single-use token (randomUUID, 24-byte hex), 10-min TTL (env-configable `BUNDLE_TOKEN_TTL_MS`), stored in-memory Map. 409 on concurrent export (in-flight guard). 120s timeout + `SIGKILL` + tree-kill on process group + 5s safety net (`unref`'d). Passphrase never written to disk/logs.
+- **`GET /internal/export/bundle?token=` (binding secret):** Streams encrypted bundle (`createReadStream`, `Content-Length`, `octet-stream`). Single-use token consumed before streaming. 410 on expiry, 404 on bogus/replayed token. File deleted on ALL paths (success, error, client disconnect, timeout). Proxy-owned path only — child-reported `outputPath` must match or 500.
+
+**Edge Function changes (InstallOpenClaw):**
+
+- **`agent-export` (modified):** Pull orchestration — calls `/internal/export/start` → streams bundle from `/internal/export/bundle` → uploads to Storage → creates 1h signed URL → returns `{ download_url, passphrase, expires_at }`. Retry budget: 3 attempts within the Edge Function timeout.
+- **`agent-export-upload` (unchanged):** 100 MB cap, `.tar.gz.enc` suffix + min-1KB validation, private `agent-exports` bucket, 1h signed URL.
+- **`test-agent-export-cap.test.ts` (new):** 6 Deno tests for the 100 MB bundle cap (over-cap 413, at-cap, under-cap, <1KB 400, wrong-suffix 400, constant verified).
+
+**auth-proxy hardening (Grok R6 + Claude R3 audited):**
+
+- `egress-probes.mjs` (new): 8 bounded probes with deps injection for hermetic unit tests. Fixed targets (no SSRF). DNS, TCP, HTTP GET/POST/PUT, export size probe.
+- `migrate-export.mjs`: `--diag-size-probe` subcommand, `--agentic` JSON contract, upload retry with backoff, phase-trace instrumentation.
+- `staging-verify.sh`: Test 18 egress probe (`/internal/diag` artifact), 16/16 PASS.
+- Process-group kill (`killExportTree`): `detached: true` + `process.kill(-pid, 'SIGKILL')` for tar grandchild. In-callback tree-kill (not external timer). All 12 `unlink` sites use `.catch` (`fs/promises` ignores callbacks).
+- `BUNDLE_TOKEN_TTL_MS` env-configable (default 10 min). Background expiry sweep every 60s + startup stale-bundle sweep.
+
+**Tests (25 automated + 6 Deno):**
+
+- `test-export-v2.mjs`: 25 tests — auth (401, timingSafeEqual 4 cases), token lifecycle (200, 404 replay, 404 bogus, 400 missing, 409 concurrent, 410 TTL expiry), streaming (exact bytes, decrypt round-trip), cleanup (abort-mid-stream, spawn-failure guard, timeout ceiling), egress-probes (5 unit tests with deps injection, real-network smoke), size equality (probe == start == actual bytes).
+- `test-agent-export-cap.test.ts`: 6 Deno tests for cap enforcement.
+
+**Audit trail:**
+
+- Grok 4.20 code audit: R6 Excellent (0 blocking). 20 commits.
+- Claude Opus 4.8 cross-model: R3 Excellent (0 Correctness / 0 Security). 10 fixes (C1-C10).
+- Grok 4.20 coverage review: R3 Excellent (0 blocking, 0 major, 2 minor). 7 findings closed across R1-R3.
+- PII Guard V2: 0 findings across 13 files.
+
+### Added — Download Agent (Phase 2 Direct, superseded by v2)
 
 - **auth-proxy `/internal/export` route (new):** Trigger agent export from the Lovable Dashboard without an LLM in the loop. Binding-secret auth (timing-safe `timingSafeEqual` + length pre-check), `execFile` child (no shell) running `migrate-export.mjs --agentic --upload --callback-url`, 120s timeout + `SIGKILL` + independent +5s safety net (`unref`'d), randomized `/tmp` output path, `unlink` on every path (including safety net), 10 MB stdout `maxBuffer`, stderr swallowed unless `AGENT_EXPORT_DEBUG=1`, fail-closed guards for missing `expires_at` / missing `passphrase`.
 - **`agent-export` Edge Function (new, InstallOpenClaw):** Privy JWT verification, scoped to the caller's single active deployment; calls container `/internal/export` with `x-binding-secret`; strictly validates the returned download URL (Supabase hostname + per-user path prefix + token); returns `{ download_url, passphrase, expires_at }` to the Dashboard. Passphrase is NEVER persisted.
