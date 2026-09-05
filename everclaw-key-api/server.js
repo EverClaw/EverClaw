@@ -189,6 +189,9 @@ const LIMIT_LUA = `
 
 // POST /bootstrap/challenge
 app.post("/bootstrap/challenge", async (req, res) => {
+  if (!SECRET || req.headers["x-admin-secret"] !== SECRET) {
+    return res.status(401).json({ error: "unauthorized" });
+  }
   if (!redis) return res.status(503).json({ error: "Redis not configured" });
 
   const { fingerprint, timestamp } = req.body;
@@ -215,6 +218,9 @@ app.post("/bootstrap/challenge", async (req, res) => {
 
 // POST /bootstrap
 app.post("/bootstrap", async (req, res) => {
+  if (!SECRET || req.headers["x-admin-secret"] !== SECRET) {
+    return res.status(401).json({ error: "unauthorized" });
+  }
   if (!redis) return res.status(503).json({ error: "Redis not configured" });
 
   const { wallet, fingerprint, challengeNonce, solution, timestamp } = req.body;
@@ -289,6 +295,9 @@ app.post("/bootstrap", async (req, res) => {
 
 // POST /verify-xpost
 app.post("/verify-xpost", async (req, res) => {
+  if (!SECRET || req.headers["x-admin-secret"] !== SECRET) {
+    return res.status(401).json({ error: "unauthorized" });
+  }
   if (!redis) return res.status(503).json({ error: "Redis not configured" });
 
   const { wallet, claimCode } = req.body;
@@ -317,6 +326,9 @@ app.post("/verify-xpost", async (req, res) => {
 
 // DELETE /forget (GDPR)
 app.delete("/forget", async (req, res) => {
+  if (!SECRET || req.headers["x-admin-secret"] !== SECRET) {
+    return res.status(401).json({ error: "unauthorized" });
+  }
   if (!redis) return res.status(503).json({ error: "Redis not configured" });
 
   const { wallet, fingerprintHash } = req.body;
