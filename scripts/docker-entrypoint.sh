@@ -58,7 +58,12 @@ fi
 # ─── Template Placeholder Values ─────────────────────────────────────────────
 # Resolve placeholder values from env vars with sensible defaults.
 # These are substituted into boot templates during first-run scaffold.
-TPL_AGENT_NAME="${EVERCLAW_AGENT_NAME:-EverClaw}"
+# Agent display name (drives the UI heading + IDENTITY.md).
+# Priority: AGENT_NAME (set by InstallOpenClaw provisioning functions: deploy-agent,
+# restore-deployment, upgrade-container, relabel-lease) > EVERCLAW_AGENT_NAME (legacy
+# env alias) > product default "OpenClaw". Never default to the image/repo brand
+# "EverClaw" — that is not the user-visible agent name.
+TPL_AGENT_NAME="${AGENT_NAME:-${EVERCLAW_AGENT_NAME:-OpenClaw}}"
 TPL_AGENT_VIBE="${EVERCLAW_AGENT_VIBE:-Resourceful, direct, always shipping}"
 TPL_USER_NAME="${EVERCLAW_USER_NAME:-User}"
 TPL_USER_DISPLAY_NAME="${EVERCLAW_USER_DISPLAY_NAME:-$TPL_USER_NAME}"
