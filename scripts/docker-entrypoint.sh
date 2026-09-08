@@ -122,6 +122,51 @@ for template in AGENTS SOUL USER IDENTITY HEARTBEAT TOOLS; do
   fi
 done
 
+# ─── Upgrade stale IDENTITY.md (BACK-IOC-012) ────────────────────────────────
+# Warm buffers and old containers often have IDENTITY.md with "Name: EverClaw".
+# The Control UI welcome heading reads agent.identity.name from this file.
+# We upgrade it to "OpenClaw" on every start (idempotent).
+# Line-anchored, single ERE, detection and rewrite structurally identical:
+# ^ws (bullet)? label ws EverClaw ws$. Only rewrites a Name line whose value is
+# exactly "EverClaw" — leading whitespace, bullet (-, *, +, or none), the four
+# label forms OpenClaw's IDENTITY.md parser accepts (**Name:** / **Name**: /
+# Name: / name: — the parser normalizes labels case-insensitively and strips
+# *_), any inner spacing, and trailing whitespace/CR are all matched; the
+# rewrite preserves the trailing whitespace/CR (CRLF-safe — the CR is captured
+# and re-emitted, not stripped). Deliberate custom names like "EverClawBot" or "MyEverClaw" never match and are never
+# mangled. Replacement value is TPL_AGENT_NAME (via the pre-escaped
+# SED_AGENT_NAME), so the upgrade honors the same AGENT_NAME env priority
+# chain as fresh scaffolding instead of force-resetting a custom name.
+# Skipped when TPL_AGENT_NAME is itself "EverClaw" (whitespace-tolerant —
+# the allowlist permits spaces, so " EverClaw " would otherwise rewrite to
+# identical content and re-log on every start; idempotency violation).
+if [ -f "${WORKSPACE}/IDENTITY.md" ] && \
+   ! printf '%s' "${TPL_AGENT_NAME}" | LC_ALL=C grep -qE '^[[:space:]]*EverClaw[[:space:]]*$'; then
+  if LC_ALL=C grep -qE '^[[:space:]]*([-*+][[:space:]]*)?(\*\*Name:\*\*|\*\*Name\*\*:|Name:|name:)[[:space:]]*EverClaw[[:space:]]*$' "${WORKSPACE}/IDENTITY.md"; then
+    TMP_IDENTITY="${WORKSPACE}/.IDENTITY.md.upgrade.$$"
+    # Atomic: write the upgraded copy to a temp file, then mv over the original.
+    # Never truncate IDENTITY.md in place — under set -e a mid-write failure must
+    # leave the original intact, not a zero-byte file.
+    # Rewrite ERE is structurally identical to the grep ERE above (ws, optional
+    # bullet, label, ws are captured separately and re-emitted), so any line the
+    # detection matches is also rewritten — no match/rewrite divergence. The
+    # trailing-whitespace group (\5) is re-emitted so CRLF files keep their CR.
+    # Delimiter note: this sed uses "/" while SED_AGENT_NAME is escaped for "|"
+    # (the template loop's delimiter). This is safe ONLY because the
+    # TPL_AGENT_NAME allowlist forbids both "/" and "|"; if the allowlist is
+    # ever relaxed, this expression must switch to the same delimiter.
+    if LC_ALL=C sed -E \
+        -e "s/^([[:space:]]*)([-*+][[:space:]]*)?(\*\*Name:\*\*|\*\*Name\*\*:|Name:|name:)([[:space:]]*)EverClaw([[:space:]]*)$/\1\2\3\4${SED_AGENT_NAME}\5/" \
+        "${WORKSPACE}/IDENTITY.md" > "${TMP_IDENTITY}" \
+        && mv "${TMP_IDENTITY}" "${WORKSPACE}/IDENTITY.md"; then
+      echo "🔄 Upgraded stale IDENTITY.md: EverClaw → ${TPL_AGENT_NAME} (BACK-IOC-012)"
+    else
+      rm -f "${TMP_IDENTITY}"
+      echo "⚠️  IDENTITY.md upgrade failed — original left intact" >&2
+    fi
+  fi
+fi
+
 # ─── Skill Restore (Barney bind-mount fix) ──────────────────────────────────
 # The image bakes the EverClaw skill into the workspace at build time, but
 # Barney mounts an EMPTY persistent volume over the workspace home directory, which

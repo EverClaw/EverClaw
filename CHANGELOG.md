@@ -2,6 +2,18 @@
 
 All notable changes to EverClaw are documented here.
 
+## [Unreleased] - 2026-09-08
+
+### Fixed — Stale IDENTITY.md upgrade: EverClaw → resolved agent name (BACK-IOC-012 follow-up)
+
+Warm buffers and containers provisioned from older images kept showing "EverClaw" in the Control UI chat welcome heading even after the first BACK-IOC-012 fix: their persistent volumes already contain an `IDENTITY.md` scaffolded by the old template (whose default was `EverClaw`), and the entrypoint only fixes the default for *fresh* scaffolds. The chat welcome heading reads the agent identity name parsed from this file.
+
+- Entrypoint now runs an idempotent startup upgrade: any `Name:` line whose value is exactly `EverClaw` is rewritten to the resolved `TPL_AGENT_NAME` (same `AGENT_NAME` → `EVERCLAW_AGENT_NAME` → `OpenClaw` priority chain as fresh scaffolding, via the pre-escaped `SED_AGENT_NAME`).
+- Line-anchored exact-value match (`EverClaw[[:space:]]*$`): deliberate custom names like `EverClawBot` or `MyEverClaw` are never mangled. Covers all label forms the IDENTITY.md parser accepts (`**Name:**`, `**Name**:`, `Name:`, `name:`), optional `-`/`*`/`+` bullets, any spacing, and CRLF files (trailing CR preserved, not stripped).
+- Atomic write: upgraded copy goes to a temp file, then `mv` over the original; a mid-write failure under `set -e` leaves the original intact (no zero-byte truncation). `mv` failure is on the failure path (temp cleaned, warning logged).
+- Skipped when the resolved name is itself `EverClaw` (whitespace-tolerant guard) so the rewrite can never re-log on every start.
+- Detection and rewrite EREs are structurally identical (no match-without-rewrite divergence); both pinned to `LC_ALL=C`.
+
 ## [Unreleased] - 2026-09-07
 
 ### Fixed — Default agent name "OpenClaw" + AGENT_NAME env wiring (BACK-IOC-012)
