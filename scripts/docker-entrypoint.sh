@@ -69,14 +69,18 @@ TPL_AGENT_NAME="${AGENT_NAME:-${EVERCLAW_AGENT_NAME:-OpenClaw}}"
 # (deploy-agent/restore/upgrade/relabel via sanitize-agent-name.ts: ^[a-zA-Z0-9 _-]+$, max
 # 50) and the DB has a CHECK constraint, but the entrypoint is the final consumer — fail
 # closed here so a hostile/unsanitized env value can never break the sed substitution or
-# inject into a scaffolded template. Mirrors sanitize-agent-name.ts.
+# inject into a scaffolded template. Mirrors sanitize-agent-name.ts exactly.
 TPL_AGENT_NAME="$(printf '%s' "$TPL_AGENT_NAME" | tr -d '\n\r' | head -c 50)"
-case "$TPL_AGENT_NAME" in
-  ''|*[!a-zA-Z0-9_\ -]* )
-    echo "entrypoint: invalid AGENT_NAME, using 'OpenClaw'" >&2
-    TPL_AGENT_NAME="OpenClaw"
-    ;;
-esac
+# Locale-stable ASCII allowlist (LC_ALL=C prevents locale widening of a-z/A-Z ranges).
+if ! printf '%s' "$TPL_AGENT_NAME" | LC_ALL=C grep -Eq '^[a-zA-Z0-9 _-]+$'; then
+  echo "entrypoint: invalid AGENT_NAME, using 'OpenClaw'" >&2
+  TPL_AGENT_NAME="OpenClaw"
+fi
+# Reject whitespace-only names (they would scaffold a blank heading).
+if [ -z "$(printf '%s' "$TPL_AGENT_NAME" | tr -d '[:space:]')" ]; then
+  echo "entrypoint: blank AGENT_NAME, using 'OpenClaw'" >&2
+  TPL_AGENT_NAME="OpenClaw"
+fi
 TPL_AGENT_VIBE="${EVERCLAW_AGENT_VIBE:-Resourceful, direct, always shipping}"
 TPL_USER_NAME="${EVERCLAW_USER_NAME:-User}"
 TPL_USER_DISPLAY_NAME="${EVERCLAW_USER_DISPLAY_NAME:-$TPL_USER_NAME}"
@@ -90,6 +94,11 @@ TPL_DEFAULT_MODEL="${EVERCLAW_DEFAULT_MODEL:-glm-5.2}"
 #   2. ${SKILLS_DIR}/templates/boot — in-image skill dir (named-volume / local Docker fallback)
 # On Barney, the empty host bind mount shadows the image's workspace/skills dir, so
 # the skill-dir path does NOT exist at runtime — only the /opt path survives.
+# Escape sed replacement metacharacters (& and \\) so a display name can never
+# corrupt the substitution even if it somehow bypassed the whitelist above.
+# Computed once, before the template loop (all templates share the same name).
+SED_AGENT_NAME="$(printf '%s' "$TPL_AGENT_NAME" | sed -e 's/[&\\]/\\&/g')"
+
 for template in AGENTS SOUL USER IDENTITY HEARTBEAT TOOLS; do
   target="${WORKSPACE}/${template}.md"
   source=""
@@ -99,9 +108,6 @@ for template in AGENTS SOUL USER IDENTITY HEARTBEAT TOOLS; do
     source="${SKILLS_DIR}/templates/boot/${template}.template.md"
   fi
   if [ ! -f "$target" ] && [ -n "$source" ]; then
-    # Escape sed replacement metacharacters (& and \\) so a display name can never
-    # corrupt the substitution even if it somehow bypassed the whitelist above.
-    SED_AGENT_NAME="$(printf '%s' "$TPL_AGENT_NAME" | sed -e 's/[&\\]/\\&/g')"
     sed \
       -e "s|__AGENT_NAME__|${SED_AGENT_NAME}|g" \
       -e "s|__AGENT_VIBE__|${TPL_AGENT_VIBE}|g" \
