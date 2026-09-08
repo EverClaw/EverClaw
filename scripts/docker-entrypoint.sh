@@ -97,7 +97,7 @@ TPL_DEFAULT_MODEL="${EVERCLAW_DEFAULT_MODEL:-glm-5.2}"
 # Escape sed replacement metacharacters (& and \\) so a display name can never
 # corrupt the substitution even if it somehow bypassed the whitelist above.
 # Computed once, before the template loop (all templates share the same name).
-SED_AGENT_NAME="$(printf '%s' "$TPL_AGENT_NAME" | sed -e 's/[&\\]/\\&/g')"
+SED_AGENT_NAME="$(printf '%s' "$TPL_AGENT_NAME" | sed -e 's/[&\\]/\\&/g' -e 's/|/\\|/g')"
 
 for template in AGENTS SOUL USER IDENTITY HEARTBEAT TOOLS; do
   target="${WORKSPACE}/${template}.md"
