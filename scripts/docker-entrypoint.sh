@@ -69,7 +69,8 @@ TPL_AGENT_NAME="${AGENT_NAME:-${EVERCLAW_AGENT_NAME:-OpenClaw}}"
 # (deploy-agent/restore/upgrade/relabel via sanitize-agent-name.ts: ^[a-zA-Z0-9 _-]+$, max
 # 50) and the DB has a CHECK constraint, but the entrypoint is the final consumer — fail
 # closed here so a hostile/unsanitized env value can never break the sed substitution or
-# inject into a scaffolded template. Mirrors sanitize-agent-name.ts exactly.
+# inject into a scaffolded template. Mirrors the allowlist and 50-char cap of
+# sanitize-agent-name.ts; fails closed to "OpenClaw" on rejection.
 TPL_AGENT_NAME="$(printf '%s' "$TPL_AGENT_NAME" | tr -d '\n\r' | head -c 50)"
 # Locale-stable ASCII allowlist (LC_ALL=C prevents locale widening of a-z/A-Z ranges).
 if ! printf '%s' "$TPL_AGENT_NAME" | LC_ALL=C grep -Eq '^[a-zA-Z0-9 _-]+$'; then
