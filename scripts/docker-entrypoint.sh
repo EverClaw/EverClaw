@@ -58,7 +58,30 @@ fi
 # ─── Template Placeholder Values ─────────────────────────────────────────────
 # Resolve placeholder values from env vars with sensible defaults.
 # These are substituted into boot templates during first-run scaffold.
-TPL_AGENT_NAME="${EVERCLAW_AGENT_NAME:-EverClaw}"
+# Agent display name (drives the UI heading + IDENTITY.md).
+# Priority: AGENT_NAME (set by InstallOpenClaw provisioning functions: deploy-agent,
+# restore-deployment, upgrade-container, relabel-lease) > EVERCLAW_AGENT_NAME (legacy
+# env alias) > product default "OpenClaw". Never default to the image/repo brand
+# "EverClaw" — that is not the user-visible agent name.
+TPL_AGENT_NAME="${AGENT_NAME:-${EVERCLAW_AGENT_NAME:-OpenClaw}}"
+# Defense-in-depth: AGENT_NAME is substituted into boot templates via sed, so it must
+# be a safe single-line display string. InstallOpenClaw sanitizes at every writer layer
+# (deploy-agent/restore/upgrade/relabel via sanitize-agent-name.ts: ^[a-zA-Z0-9 _-]+$, max
+# 50) and the DB has a CHECK constraint, but the entrypoint is the final consumer — fail
+# closed here so a hostile/unsanitized env value can never break the sed substitution or
+# inject into a scaffolded template. Mirrors the allowlist and 50-char cap of
+# sanitize-agent-name.ts; fails closed to "OpenClaw" on rejection.
+TPL_AGENT_NAME="$(printf '%s' "$TPL_AGENT_NAME" | tr -d '\n\r' | head -c 50)"
+# Locale-stable ASCII allowlist (LC_ALL=C prevents locale widening of a-z/A-Z ranges).
+if ! printf '%s' "$TPL_AGENT_NAME" | LC_ALL=C grep -Eq '^[a-zA-Z0-9 _-]+$'; then
+  echo "entrypoint: invalid AGENT_NAME, using 'OpenClaw'" >&2
+  TPL_AGENT_NAME="OpenClaw"
+fi
+# Reject whitespace-only names (they would scaffold a blank heading).
+if [ -z "$(printf '%s' "$TPL_AGENT_NAME" | tr -d '[:space:]')" ]; then
+  echo "entrypoint: blank AGENT_NAME, using 'OpenClaw'" >&2
+  TPL_AGENT_NAME="OpenClaw"
+fi
 TPL_AGENT_VIBE="${EVERCLAW_AGENT_VIBE:-Resourceful, direct, always shipping}"
 TPL_USER_NAME="${EVERCLAW_USER_NAME:-User}"
 TPL_USER_DISPLAY_NAME="${EVERCLAW_USER_DISPLAY_NAME:-$TPL_USER_NAME}"
@@ -72,6 +95,11 @@ TPL_DEFAULT_MODEL="${EVERCLAW_DEFAULT_MODEL:-glm-5.2}"
 #   2. ${SKILLS_DIR}/templates/boot — in-image skill dir (named-volume / local Docker fallback)
 # On Barney, the empty host bind mount shadows the image's workspace/skills dir, so
 # the skill-dir path does NOT exist at runtime — only the /opt path survives.
+# Escape sed replacement metacharacters (& and \\) so a display name can never
+# corrupt the substitution even if it somehow bypassed the whitelist above.
+# Computed once, before the template loop (all templates share the same name).
+SED_AGENT_NAME="$(printf '%s' "$TPL_AGENT_NAME" | sed -e 's/[&\\]/\\&/g' -e 's/|/\\|/g')"
+
 for template in AGENTS SOUL USER IDENTITY HEARTBEAT TOOLS; do
   target="${WORKSPACE}/${template}.md"
   source=""
@@ -82,7 +110,7 @@ for template in AGENTS SOUL USER IDENTITY HEARTBEAT TOOLS; do
   fi
   if [ ! -f "$target" ] && [ -n "$source" ]; then
     sed \
-      -e "s|__AGENT_NAME__|${TPL_AGENT_NAME}|g" \
+      -e "s|__AGENT_NAME__|${SED_AGENT_NAME}|g" \
       -e "s|__AGENT_VIBE__|${TPL_AGENT_VIBE}|g" \
       -e "s|__USER_NAME__|${TPL_USER_NAME}|g" \
       -e "s|__USER_DISPLAY_NAME__|${TPL_USER_DISPLAY_NAME}|g" \
