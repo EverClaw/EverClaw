@@ -38,7 +38,8 @@
 #   OPENCLAW_GATEWAY_TOKEN    — Auth token for the web UI (auto-generated if not set)
 #   MORPHEUS_GATEWAY_API_KEY  — Morpheus API Gateway key (get free at https://app.mor.org)
 #   MORPHEUS_PROXY_API_KEY    — Bearer token for local Morpheus proxy-router
-#   EVERCLAW_AGENT_NAME       — Agent display name (default: EverClaw)
+#   AGENT_NAME                — Agent display name (set by InstallOpenClaw provisioners; default: OpenClaw)
+#   EVERCLAW_AGENT_NAME       — Legacy alias for AGENT_NAME (fallback; default: OpenClaw)
 #   EVERCLAW_USER_NAME        — Your name (default: User)
 #   EVERCLAW_USER_DISPLAY_NAME — How the agent addresses you (default: same as USER_NAME)
 #   TZ                        — Timezone for the agent (default: UTC, e.g. America/New_York)
