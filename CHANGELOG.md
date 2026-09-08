@@ -2,6 +2,17 @@
 
 All notable changes to EverClaw are documented here.
 
+## [Unreleased] - 2026-09-07
+
+### Fixed — Default agent name "OpenClaw" + AGENT_NAME env wiring (BACK-IOC-012)
+
+Deployed InstallOpenClaw containers showed "EverClaw" as the agent heading in the chat UI. The entrypoint only read `EVERCLAW_AGENT_NAME` (defaulting to "EverClaw") while provisioning functions set `AGENT_NAME` — so custom agent names never applied and the image-brand default leaked into the UI.
+
+- Entrypoint now resolves: `AGENT_NAME` (provisioner) → `EVERCLAW_AGENT_NAME` (legacy alias) → default `OpenClaw`.
+- Fail-closed sanitization mirrors `sanitize-agent-name.ts` (ASCII allowlist `^[a-zA-Z0-9 _-]+$` under `LC_ALL=C`, newline/CR strip, 50-char cap, whitespace-only rejection).
+- Sed replacement metacharacters (`&`, `\`) escaped before `__AGENT_NAME__` substitution into boot templates.
+- Dockerfile env docs updated (`AGENT_NAME` primary, `EVERCLAW_AGENT_NAME` legacy alias).
+
 ## [Unreleased] - 2026-09-04
 
 ### Added — Download Agent v2 (Egress-Proof Pull Path): Container → Edge Function → signed URL
