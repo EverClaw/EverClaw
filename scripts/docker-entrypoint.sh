@@ -140,8 +140,34 @@ done
 # Skipped when TPL_AGENT_NAME is itself "EverClaw" (whitespace-tolerant —
 # the allowlist permits spaces, so " EverClaw " would otherwise rewrite to
 # identical content and re-log on every start; idempotency violation).
+# BACK-IOC-014 (2026-09-10): the OpenClaw-default upgrade below adds its own
+# `TPL_AGENT_NAME != OpenClaw` guard, so the EverClaw-only outer guard stays
+# as-is (fresh scaffolds named "OpenClaw" need the EverClaw rewrite but not
+# the default-name upgrade).
 if [ -f "${WORKSPACE}/IDENTITY.md" ] && \
    ! printf '%s' "${TPL_AGENT_NAME}" | LC_ALL=C grep -qE '^[[:space:]]*EverClaw[[:space:]]*$'; then
+  # BACK-IOC-014 (2026-09-10): when a CUSTOM name is resolved (TPL_AGENT_NAME !=
+  # default "OpenClaw"), ALSO upgrade Name lines whose value is exactly the
+  # DEFAULT "OpenClaw". Warm buffers carry a pre-scaffolded IDENTITY.md with the
+  # default name; claim-time relabel restarts the container with AGENT_NAME set,
+  # but the scaffold-if-missing loop above never rewrites an existing file — so
+  # the UI kept showing "OpenClaw" after a named claim. Same line-anchored ERE
+  # shape as the EverClaw upgrade, same atomic write, same idempotency rule:
+  # skipped when TPL_AGENT_NAME is itself "OpenClaw" (nothing to change).
+  if printf '%s' "${TPL_AGENT_NAME}" | LC_ALL=C grep -qE '^[[:space:]]*OpenClaw[[:space:]]*$'; then
+    : # custom name equals the default — default-name upgrade is a no-op
+  elif LC_ALL=C grep -qE '^[[:space:]]*([-*+][[:space:]]*)?(\*\*Name:\*\*|\*\*Name\*\*:|Name:|name:)[[:space:]]*OpenClaw[[:space:]]*$' "${WORKSPACE}/IDENTITY.md"; then
+    TMP_IDENTITY_DEFAULT="${WORKSPACE}/.IDENTITY.md.upgrade.$$"
+    if LC_ALL=C sed -E \
+        -e "s/^([[:space:]]*)([-*+][[:space:]]*)?(\*\*Name:\*\*|\*\*Name\*\*:|Name:|name:)([[:space:]]*)OpenClaw([[:space:]]*)$/\1\2\3\4${SED_AGENT_NAME}\5/" \
+        "${WORKSPACE}/IDENTITY.md" > "${TMP_IDENTITY_DEFAULT}" \
+        && mv "${TMP_IDENTITY_DEFAULT}" "${WORKSPACE}/IDENTITY.md"; then
+      echo "🔄 Upgraded default IDENTITY.md: OpenClaw → ${TPL_AGENT_NAME} (BACK-IOC-014)"
+    else
+      rm -f "${TMP_IDENTITY_DEFAULT}"
+      echo "⚠️  IDENTITY.md default-name upgrade failed — original left intact" >&2
+    fi
+  fi
   if LC_ALL=C grep -qE '^[[:space:]]*([-*+][[:space:]]*)?(\*\*Name:\*\*|\*\*Name\*\*:|Name:|name:)[[:space:]]*EverClaw[[:space:]]*$' "${WORKSPACE}/IDENTITY.md"; then
     TMP_IDENTITY="${WORKSPACE}/.IDENTITY.md.upgrade.$$"
     # Atomic: write the upgraded copy to a temp file, then mv over the original.
