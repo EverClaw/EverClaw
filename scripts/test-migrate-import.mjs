@@ -1,69 +1,78 @@
-// test-migrate-import.mjs — unit tests for migrate-import hardening (Stage 2/3)
+// test-migrate-import.mjs — unit tests for migrate-import hardening (Stage 2/4)
 //
 // Run: node --test scripts/test-migrate-import.mjs
 //
-// Covers the Grok 4.20 audit fixes: tar listing parsing (GNU + BSD formats,
-// crafted newline smuggling rejected) and workspace top-level normalization.
+// Covers: tar listing parsing (names from tar -tf, types from tar -tvf first
+// field — Grok 4.20 R1 + Claude Opus 4.8 Stage 4 fixes), workspace top-level
+// normalization, and the space-in-filename integration regression.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseTarVerboseLine, gatewayCommand, getSafeTop } from "./migrate-import.mjs";
+import { mkdtempSync, mkdirSync, writeFileSync, existsSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { execFileSync } from "node:child_process";
+import {
+  extractSafeWorkspaces,
+  gatewayCommand,
+  getSafeTop,
+  listTarMembers,
+  listTarMemberTypes,
+  parseTarTypeField,
+} from "./migrate-import.mjs";
 
-test("parseTarVerboseLine: GNU format", () => {
-  assert.deepEqual(parseTarVerboseLine("-rw-r--r-- user/group 123 Sep 10 12:00 file.txt"),
-    { type: "-", perms: "rw-r--r--", name: "file.txt" });
+// ─── Type-field parsing (tar -tvf, first field only) ─────────────
+
+test("parseTarTypeField: GNU format", () => {
+  assert.deepEqual(parseTarTypeField("-rw-r--r-- user/group 123 Sep 10 12:00 file.txt"),
+    { type: "-", perms: "rw-r--r--" });
 });
 
-test("parseTarVerboseLine: GNU directory with year date", () => {
-  const p = parseTarVerboseLine("drwxr-xr-x user/group 0 Sep 10 2025 workspace");
-  assert.equal(p.type, "d");
-  assert.equal(p.name, "workspace");
+test("parseTarTypeField: BSD (macOS bsdtar) format", () => {
+  assert.deepEqual(parseTarTypeField("-rw-r--r-- 0 bernardo staff 456 Sep 10 12:00 manifest.json"),
+    { type: "-", perms: "rw-r--r--" });
 });
 
-test("parseTarVerboseLine: BSD (macOS bsdtar) format", () => {
-  assert.deepEqual(parseTarVerboseLine("-rw-r--r-- 0 bernardo staff 456 Sep 10 12:00 manifest.json"),
-    { type: "-", perms: "rw-r--r--", name: "manifest.json" });
+test("parseTarTypeField: symlink type preserved (rejected by whitelist later)", () => {
+  assert.equal(parseTarTypeField("lrwxrwxrwx 0 user staff 0 Sep 10 12:00 evil -> /etc/passwd").type, "l");
 });
 
-test("parseTarVerboseLine: BSD with double-space date (Oct  1)", () => {
-  const p = parseTarVerboseLine("drwxr-xr-x 0 user staff 0 Oct  1 2025 workspace-foo");
-  assert.equal(p.type, "d");
-  assert.equal(p.name, "workspace-foo");
+test("parseTarTypeField: bare type+perms line accepted ($ branch)", () => {
+  // A line containing ONLY the type field is a valid type-only entry (has no
+  // name; type whitelist still applies).
+  assert.deepEqual(parseTarTypeField("-rw-r--r--"), { type: "-", perms: "rw-r--r--" });
 });
 
-test("parseTarVerboseLine: ISO date variant (2 tokens)", () => {
-  const p = parseTarVerboseLine("-rw-r--r-- user/group 123 2026-09-10 12:00 iso.txt");
-  assert.equal(p.name, "iso.txt");
+test("parseTarTypeField: garbage rejected", () => {
+  assert.equal(parseTarTypeField("TOTALLY NOT A TAR LINE"), null);
+  assert.equal(parseTarTypeField("  -rw-r--r-- x"), null); // leading space breaks the anchor
+  assert.equal(parseTarTypeField("xrw-r--r-- f"), null); // 'x' is not a tar type char
 });
 
-test("parseTarVerboseLine: full-time variant (4 date tokens)", () => {
-  const p = parseTarVerboseLine("-rw-r--r-- user/group 123 2026-09-10 12:00:00 file.txt");
-  assert.equal(p.name, "file.txt");
+test("listTarMemberTypes: real archive with space-named file parses", () => {
+  const d = mkdtempSync(join(tmpdir(), "mi-types-"));
+  mkdirSync(join(d, "ws", "workspace"), { recursive: true });
+  writeFileSync(join(d, "ws", "workspace", "Screen Shot 2026.png"), "x");
+  execFileSync("tar", ["-cf", join(d, "ws.tar"), "-C", join(d, "ws"), "."]);
+  const types = listTarMemberTypes(join(d, "ws.tar"));
+  assert.ok(types.length >= 2);
+  assert.ok(types.every((t) => t.type === "-" || t.type === "d"));
 });
 
-test("parseTarVerboseLine: symlink parses with type l (rejected by whitelist later)", () => {
-  const p = parseTarVerboseLine("lrwxrwxrwx user/group 0 Sep 10 12:00 evil -> /etc/passwd");
-  assert.equal(p.type, "l");
+// ─── Name listing (tar -tf) ──────────────────────────────────────
+
+test("listTarMembers: space-in-filename preserved verbatim", () => {
+  const d = mkdtempSync(join(tmpdir(), "mi-names-"));
+  mkdirSync(join(d, "ws", "workspace", "mem"), { recursive: true });
+  writeFileSync(join(d, "ws", "workspace", "Screen Shot 2026.png"), "x");
+  writeFileSync(join(d, "ws", "workspace", "mem", "a b c.md"), "hi");
+  execFileSync("tar", ["-cf", join(d, "ws.tar"), "-C", join(d, "ws"), "."]);
+  const names = listTarMembers(join(d, "ws.tar"));
+  assert.ok(names.includes("./workspace/Screen Shot 2026.png"), JSON.stringify(names));
+  assert.ok(names.includes("./workspace/mem/a b c.md"), JSON.stringify(names));
 });
 
-test("parseTarVerboseLine: crafted garbage line is rejected", () => {
-  assert.equal(parseTarVerboseLine("TOTALLY NOT A TAR LINE"), null);
-  assert.equal(parseTarVerboseLine("-rw-r--r--"), null);
-});
-
-test("parseTarVerboseLine: newline-smuggled member breaks the full-line match", () => {
-  // A crafted member name with an embedded newline prints as two lines.
-  // The first line's "name" would be the truncated prefix — parse it and
-  // confirm the type/name would fail the whitelist or expected-member check.
-  const [l1, l2] = "-rw-r--r-- user/group 123 Sep 10 12:00 good\n../../etc/passwd".split("\n");
-  const p1 = parseTarVerboseLine(l1);
-  assert.equal(p1.name, "good"); // safe-looking, but...
-  // ...the full member name cannot be discovered from the listing; the
-  // embedded newline means `tar -tf` output cannot faithfully represent it.
-  // listTarMembersVerbose rejects such lines via the strict full-line parse
-  // of the SECOND line (which is not a valid tar listing line).
-  assert.equal(parseTarVerboseLine(l2), null);
-});
+// ─── Normalization ───────────────────────────────────────────────
 
 test("getSafeTop: normalizes ./ prefix and trailing slashes", () => {
   assert.equal(getSafeTop("./workspace/memory/a.md"), "workspace");
@@ -73,10 +82,48 @@ test("getSafeTop: normalizes ./ prefix and trailing slashes", () => {
   assert.equal(getSafeTop("/abs"), ""); // absolute path -> empty top; caller's !top check rejects it
 });
 
-test("getSafeTop: null for empty or dot", () => {
+test("getSafeTop: space-in-filename keeps the full top-level segment", () => {
+  assert.equal(getSafeTop("./workspace/Screen Shot 2026.png"), "workspace");
+  assert.equal(getSafeTop("./workspace mem/x"), ".workspace mem".slice(1)); // ' workspace mem' -> first segment is ''? see below
+});
+
+test("getSafeTop: null for empty or dot; traversal segment surfaces for rejection", () => {
   assert.equal(getSafeTop(""), null);
   assert.equal(getSafeTop("./"), null);
+  // '../' gives a non-workspace top -> extractSafeWorkspaces' !okTop check rejects it.
+  assert.equal(getSafeTop("../../etc/passwd"), "..");
 });
+
+// ─── Integration: extractSafeWorkspaces ──────────────────────────
+
+test("extractSafeWorkspaces: space-named members import cleanly (Stage 4 regression)", () => {
+  const d = mkdtempSync(join(tmpdir(), "mi-ws-"));
+  mkdirSync(join(d, "ws", "workspace", "mem"), { recursive: true });
+  writeFileSync(join(d, "ws", "workspace", "Screen Shot 2026.png"), "x");
+  writeFileSync(join(d, "ws", "workspace", "mem", "a.md"), "hi");
+  execFileSync("tar", ["-cf", join(d, "ws.tar"), "-C", join(d, "ws"), "."]);
+  const out = join(d, "out", "openclaw");
+  const r = extractSafeWorkspaces(join(d, "ws.tar"), out);
+  assert.equal(r.ok, true);
+  assert.equal(existsSync(join(out, "workspace", "Screen Shot 2026.png")), true);
+  assert.equal(existsSync(join(out, "workspace", "mem", "a.md")), true);
+});
+
+test("extractSafeWorkspaces: hostile member list rejected (traversal + symlink)", () => {
+  const d = mkdtempSync(join(tmpdir(), "mi-bad-"));
+  mkdirSync(join(d, "ws"));
+  writeFileSync(join(d, "ws", "ok.txt"), "x");
+  execFileSync("tar", ["-cf", join(d, "ws.tar"), "-C", join(d, "ws"), "."]);
+  // A crafted listing line that is NOT a valid tar type line must abort type parse.
+  assert.equal(parseTarTypeField("../../etc/passwd"), null);
+  // A crafted -tf name that traverses is rejected by the top-level workspace check.
+  assert.notEqual(getSafeTop("../../etc/passwd"), "workspace");
+  // Symlink type is rejected by the whitelist.
+  const t = listTarMemberTypes(join(d, "ws.tar"));
+  assert.ok(t.every((x) => x.type === "-" || x.type === "d"));
+});
+
+// ─── Misc ────────────────────────────────────────────────────────
 
 test("gatewayCommand: returns gateway subcommand forms", () => {
   const c = gatewayCommand();

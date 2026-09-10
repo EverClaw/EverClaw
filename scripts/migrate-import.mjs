@@ -42,52 +42,77 @@ function trySh(cmd, args, opts = {}) {
   catch (err) { return { ok: false, err: err.message, out: err.stdout || '' }; }
 }
 
-// ─── Strict tar listing parsing (Grok 4.20 R1 Security fix, 2026-09-10) ───
-// Splitting `tar -t/-tvf` output at newlines and sniffing the first character
-// is spoofable: a crafted member name can embed a newline so a hostile member
-// is parsed as a valid-looking second line, defeating the type/name checks.
-// Require EVERY non-empty line to match the exact POSIX verbose format, and
-// reject names containing embedded newlines outright.
-// Two accepted `tar -tvf` line formats (Grok 4.20 R3 Correctness fix — a single
-// rigid POSIX-ISO pattern rejected legitimate bundles):
-//   GNU:   -rw-r--r-- user/group 123 Sep 10 12:00 name
-//   BSD:   -rw-r--r-- 0 user staff 123 Sep 10 12:00 name   (macOS bsdtar)
-// In both, the NAME is the final field of a full-line match; the type char is
-// group 1. A crafted member with an embedded newline cannot match either
-// full-line pattern (its line breaks apart), so the archive is rejected.
-// Owner/group tokens may contain spaces, so greedy capture for the name tail.
-// Date/time after size is 2-4 tokens: 'Sep 10 12:00' (3), 'Oct 1 2025' (3),
-// '2026-09-10 12:00' (2), '2026-09-10 12:00:00' + tz (3-4), GNU --full-time (4).
-const TAR_TVF_GNU = /^([bcdhlps-])([rwxStTs-]{9})\s+\S+\s+\d+\s+(?:\S+\s+){2,4}(.+)$/;
-const TAR_TVF_BSD = /^([bcdhlps-])([rwxStTs-]{9})\s+\d+\s+\S+\s+\S+\s+\d+\s+(?:\S+\s+){2,4}(.+)$/;
+// ─── Tar listing validation (Grok 4.20 R1 Security + Claude Opus 4.8 Stage 4
+// Correctness fixes, 2026-09-10) ───
+// NAMES come from `tar -tf` (whole line = member name; nothing to misparse).
+// TYPES come from `tar -tvf` but ONLY the fixed-width type field is parsed:
+// verbose formats differ across GNU/BSD date and owner/group spellings, and
+// greedy name capture corrupts multi-word filenames (proven: 'Screen Shot
+// 2026.png' parsed as 'Shot 2026.png' -> spurious 'unsafe member' rejection).
+// Crafted listings are bounded the same way as before: every -tvf line must
+// start with a valid type+perms field; name validation runs per -tf line
+// against strict top-level/path rules; extraction uses --no-absolute-names.
+const TAR_TVF_TYPE = /^([bcdhlps-])([rwxStTs-]{9})(?:[ \t]|$)/;
 
-export function parseTarVerboseLine(line) {
-  const m = TAR_TVF_GNU.exec(line) || TAR_TVF_BSD.exec(line);
+export function parseTarTypeField(line) {
+  const m = TAR_TVF_TYPE.exec(line);
   if (!m) return null;
-  return { type: m[1], perms: m[2], name: m[3].trim() };
+  return { type: m[1], perms: m[2] };
 }
 
-function listTarMembersVerbose(tarPath, timeout = 60000) {
+/** Full member names from `tar -tf` (one per line; validated by callers). */
+export function listTarMembers(tarPath, timeout = 60000) {
+  const out = sh('tar', ['-tf', tarPath], { timeout });
+  return out.split('\n')
+    .map(l => l.replace(/\r$/, ''))
+    .filter(l => l.trim().length > 0);
+}
+
+/** Type fields from `tar -tvf`; any line without a valid type+perms aborts. */
+export function listTarMemberTypes(tarPath, timeout = 60000) {
   const out = sh('tar', ['-tvf', tarPath], { timeout });
-  const members = [];
+  const types = [];
   for (const rawLine of out.split('\n')) {
     const line = rawLine.replace(/\r$/, '');
     if (!line.trim()) continue;
-    const parsed = parseTarVerboseLine(line);
+    const parsed = parseTarTypeField(line);
     if (!parsed) throw new Error(`unsafe archive listing line (crafted member?): ${line.slice(0, 80)}`);
-    if (parsed.name.includes('\n') || parsed.name.includes('\r')) {
-      throw new Error(`unsafe archive member name (embedded newline): ${parsed.name.slice(0, 80)}`);
-    }
-    members.push({ type: parsed.type, perms: parsed.perms, name: parsed.name });
+    types.push(parsed);
   }
-  return members;
+  return types;
 }
 
-function assertRegularFileOrDirMembers(members, what) {
-  const bad = members.find(m => m.type !== '-' && m.type !== 'd');
+function assertRegularFileOrDirMembers(types, what) {
+  const bad = types.find(t => t.type !== '-' && t.type !== 'd');
   if (bad) {
-    throw new Error(`unsafe ${what}: member type '${bad.type}' not allowed (${bad.name.slice(0, 80)})`);
+    throw new Error(`unsafe ${what}: member type '${bad.type}' not allowed`);
   }
+}
+
+// ─── Platform-aware extraction flags (Claude Opus 4.8 Stage 4 discover) ───
+// `--no-absolute-names` is GNU-tar-only: macOS bsdtar REJECTS it (proven live
+// 2026-09-10). bsdtar strips leading '/' by default, so absolute-name defense
+// is (a) name validation above and (b) bsdtar's default stripping; GNU gets
+// the explicit flag. --no-same-owner/--no-same-permissions are supported by
+// both (verified on macOS bsdtar 3.5.3).
+let _tarNoAbsFlag = null;
+function noAbsoluteNamesFlag() {
+  if (_tarNoAbsFlag === null) {
+    try {
+      _tarNoAbsFlag = sh('tar', ['--help'], { timeout: 10000 })
+        .toLowerCase().includes('no-absolute-names');
+    } catch {
+      _tarNoAbsFlag = false;
+    }
+  }
+  return _tarNoAbsFlag ? '--no-absolute-names' : null;
+}
+
+function tarExtractFlags() {
+  const flags = ['--no-same-owner', '--no-same-permissions'];
+  const abs = noAbsoluteNamesFlag();
+  if (abs) flags.push(abs);
+  return flags;
 }
 
 // Single normalization used by BOTH the workspace-tar validation and the
@@ -125,29 +150,28 @@ export function gatewayCommand(version = null) {
  * platforms where the tar carries ownership (e.g. root-created bundles).
  */
 export function extractSafeWorkspaces(wsTar, openclawDir) {
-  const listing = listTarMembersVerbose(wsTar);
+  const names = listTarMembers(wsTar);
   const bad = [];
-  for (const m of listing) {
-    const norm = m.name.replace(/\/+$/, '').replace(/^\.\//, '');
+  for (const m of names) {
+    const norm = m.replace(/\/+$/, '').replace(/^\.\//, '');
     if (norm === '.' || norm === '') continue;
-    const top = getSafeTop(m.name);
+    const top = getSafeTop(m);
     const okTop = top === 'workspace' || (top !== null && top.startsWith('workspace-'));
     if (!top || !okTop || norm.includes('..') || norm.startsWith('/') || /^[A-Za-z]:/.test(norm)) {
-      bad.push(m.name);
+      bad.push(m);
     }
   }
   if (bad.length > 0) {
     throw new Error(`unsafe workspace tar members rejected: ${bad.slice(0, 5).join(', ')}`);
   }
   // Symlink members are ambiguous to vet reliably; require none.
-  // Claude R3: whitelist types — reject hardlinks (h), device nodes (b/c),
-  // FIFOs (p) too. Only regular files (-) and directories (d) allowed.
-  // Parsed strictly (Grok 4.20 R1): no newline-smuggled members.
-  assertRegularFileOrDirMembers(listing, 'workspace tar');
+  // Claude R3 + Grok 4.20 R1: whitelist types — reject hardlinks (h), device
+  // nodes (b/c), FIFOs (p). Only regular files (-) and directories (d) allowed.
+  assertRegularFileOrDirMembers(listTarMemberTypes(wsTar), 'workspace tar');
   const extractDirHint = mkdtempSync(join(tmpdir(), 'mig-ws-'));
   try {
-    sh('tar', ['-xf', wsTar, '-C', extractDirHint, '--no-same-owner', '--no-same-permissions', '--no-absolute-names'], { timeout: 600000 });
-    for (const top of ['workspace', ...Array.from(new Set(listing.map(m => getSafeTop(m.name)).filter(t => t !== null && t.startsWith('workspace-'))))]) {
+    sh('tar', ['-xf', wsTar, '-C', extractDirHint, ...tarExtractFlags()], { timeout: 600000 });
+    for (const top of ['workspace', ...Array.from(new Set(names.map(m => getSafeTop(m)).filter(t => t !== null && t.startsWith('workspace-'))))]) {
       const src = join(extractDirHint, top);
       const dst = join(openclawDir, top);
       if (existsSync(src)) {
@@ -196,19 +220,19 @@ export async function unpackBundle(bundlePath, passphrase, stagingDir, expectedC
   const EXPECTED_MEMBERS = new Set(['manifest.json', 'dependency-manifest.json',
     'config.json.tmpl', 'skills-state.json', 'cron-jobs.json',
     'workspaces.tar', 'workspaces.tar.gz', 'keychain.json.enc', 'RUNBOOK.md', '.']);
-  const listing = listTarMembersVerbose(tmpTar);
-  for (const m of listing) {
-    const rel = m.name.replace(/\/+$/, '').replace(/^\.\//, '');
+  const names = listTarMembers(tmpTar);
+  for (const m of names) {
+    const rel = m.replace(/\/+$/, '').replace(/^\.\//, '');
     if (rel === '.' || rel === '') continue;
     if (rel.includes('..') || rel.startsWith('/') || /^[A-Za-z]:/.test(rel) || !EXPECTED_MEMBERS.has(rel)) {
-      throw new Error(`unsafe bundle member rejected: ${m.name}`);
+      throw new Error(`unsafe bundle member rejected: ${m}`);
     }
   }
   // Claude R3 + Grok 4.20 R1 Security fix: whitelist member types (regular
   // files + dirs only). Reject symlinks (l), hardlinks (h), device nodes
-  // (b/c), FIFOs (p). Parsed strictly — newline-smuggled members abort.
-  assertRegularFileOrDirMembers(listing, 'bundle');
-  sh('tar', ['-xf', tmpTar, '-C', extractDir, '--no-same-owner', '--no-same-permissions', '--no-absolute-names'], { timeout: 600000 });
+  // (b/c), FIFOs (p). Type field parsed strictly — crafted lines abort.
+  assertRegularFileOrDirMembers(listTarMemberTypes(tmpTar), 'bundle');
+  sh('tar', ['-xf', tmpTar, '-C', extractDir, ...tarExtractFlags()], { timeout: 600000 });
   rmSync(tmpTar, { force: true });
 
   const manifestPath = join(extractDir, 'manifest.json');
