@@ -589,19 +589,24 @@ function proxyWithBootRetry(req, res, attempt = 0) {
     res.removeListener('finish', onDone);
     res.removeListener('close', onDone);
     console.error(`[proxy] Error (attempt ${attempt + 1}):`, error.message);
-    if (isGatewayBootError(error) && attempt < GATEWAY_RETRY_MAX_ATTEMPTS - 1) {
+    // Grok R2-C1: only GET is retried — no request body to double-consume, no
+    // side effects. Non-GET falls through to the plain-text 502 immediately.
+    if (req.method === 'GET' && isGatewayBootError(error) && attempt < GATEWAY_RETRY_MAX_ATTEMPTS - 1) {
       // Client may have gone away while we waited — never retry into a dead res
-      if (res.writableEnded || res.destroyed) return;
+      if (res.writableEnded || res.destroyed || req.aborted) return;
       const delay = Math.min(GATEWAY_RETRY_BASE_MS * Math.pow(1.6, attempt), 5000);
       console.log(`[proxy] Gateway booting — retry ${attempt + 1}/${GATEWAY_RETRY_MAX_ATTEMPTS} in ${Math.round(delay)}ms`);
-      setTimeout(() => proxyWithBootRetry(req, res, attempt + 1), delay);
+      const timer = setTimeout(() => {
+        // Aborted during backoff — stop the chain (Grok R2-C2)
+        if (res.writableEnded || res.destroyed || req.aborted) return;
+        proxyWithBootRetry(req, res, attempt + 1);
+      }, delay);
+      req.once('close', () => clearTimeout(timer));
       return;
     }
     if (!res.headersSent) {
       if (req.method === 'GET') {
-        // Auto-refreshing boot page — the browser retries on its own, so the
-        // user never sees a failure state.
-        res.writeHead(502, { 'Content-Type': 'text/html; charset=utf-8', 'Retry-After': '3' });
+        res.writeHead(502, bootPageHeaders());
         serveBootPageBody(res);
       } else {
         res.writeHead(502, { 'Content-Type': 'text/plain' });
@@ -622,6 +627,17 @@ function proxyWithBootRetry(req, res, attempt = 0) {
   } catch (err) {
     onError(err);
   }
+}
+
+function bootPageHeaders() {
+  // Grok R2-S1: hardening headers on the boot page
+  return {
+    'Content-Type': 'text/html; charset=utf-8',
+    'Retry-After': '3',
+    'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline';",
+    'X-Content-Type-Options': 'nosniff',
+    'Cache-Control': 'no-store, must-revalidate',
+  };
 }
 
 function serveBootPageBody(res) {
