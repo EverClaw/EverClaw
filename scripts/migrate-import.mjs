@@ -42,14 +42,50 @@ function trySh(cmd, args, opts = {}) {
   catch (err) { return { ok: false, err: err.message, out: err.stdout || '' }; }
 }
 
+// ─── Strict tar listing parsing (Grok 4.20 R1 Security fix, 2026-09-10) ───
+// Splitting `tar -t/-tvf` output at newlines and sniffing the first character
+// is spoofable: a crafted member name can embed a newline so a hostile member
+// is parsed as a valid-looking second line, defeating the type/name checks.
+// Require EVERY non-empty line to match the exact POSIX verbose format, and
+// reject names containing embedded newlines outright.
+const TAR_TVF_LINE = /^([bcdhlps-])([rwxStTs-]{9})\s+(\S+)\s+(\S+)\s+(\d+)\s+(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2})\s+(.+)$/;
+
+function listTarMembersVerbose(tarPath, timeout = 60000) {
+  const out = sh('tar', ['-tvf', tarPath], { timeout });
+  const members = [];
+  for (const rawLine of out.split('\n')) {
+    const line = rawLine.replace(/\r$/, '');
+    if (!line.trim()) continue;
+    const m = TAR_TVF_LINE.exec(line);
+    if (!m) throw new Error(`unsafe archive listing line (crafted member?): ${line.slice(0, 80)}`);
+    const name = m[8];
+    if (name.includes('\n') || name.includes('\r')) {
+      throw new Error(`unsafe archive member name (embedded newline): ${name.slice(0, 80)}`);
+    }
+    members.push({ type: m[1], perms: m[2], owner: m[3], group: m[4], size: Number(m[5]), date: m[6], time: m[7], name });
+  }
+  return members;
+}
+
+function assertRegularFileOrDirMembers(members, what) {
+  const bad = members.find(m => m.type !== '-' && m.type !== 'd');
+  if (bad) {
+    throw new Error(`unsafe ${what}: member type '${bad.type}' not allowed (${bad.name.slice(0, 80)})`);
+  }
+}
+
 /**
  * Version-aware OpenClaw gateway command (L8).
  * `openclaw restart` does not exist in all versions (proven 2026-08-27).
+ * Kept as a function so version special-casing has one place if an old
+ * version ever needs it (Grok 4.20 R1: parameter was dead — documented
+ * instead of pretending to branch).
  */
-export function gatewayCommand(version) {
+export function gatewayCommand(version = null) {
   // All known versions use the gateway subcommand form (proven 2026-08-27:
-  // bare `openclaw restart` does not exist). Kept as a function so version
-  // special-casing has one place if an old version ever needs it (Grok R7).
+  // bare `openclaw restart` does not exist). Future version special-casing
+  // branches on `version` here.
+  void version;
   return { start: 'openclaw gateway start', status: 'openclaw gateway status' };
 }
 
@@ -63,16 +99,15 @@ export function gatewayCommand(version) {
  * platforms where the tar carries ownership (e.g. root-created bundles).
  */
 export function extractSafeWorkspaces(wsTar, openclawDir) {
-  const members = sh('tar', ['-tf', wsTar], { timeout: 60000 })
-    .split('\n').filter(Boolean);
+  const listing = listTarMembersVerbose(wsTar);
   const bad = [];
-  for (const m of members) {
-    const norm = m.replace(/\/\/$/, '');
+  for (const m of listing) {
+    const norm = m.name.replace(/\/+$/, '').replace(/^\.\//, '');
     if (norm === '.' || norm === '') continue;
     const top = norm.split('/')[0];
     const okTop = top === 'workspace' || top.startsWith('workspace-');
     if (!okTop || norm.includes('..') || norm.startsWith('/') || /^[A-Za-z]:/.test(norm)) {
-      bad.push(m);
+      bad.push(m.name);
     }
   }
   if (bad.length > 0) {
@@ -81,13 +116,12 @@ export function extractSafeWorkspaces(wsTar, openclawDir) {
   // Symlink members are ambiguous to vet reliably; require none.
   // Claude R3: whitelist types — reject hardlinks (h), device nodes (b/c),
   // FIFOs (p) too. Only regular files (-) and directories (d) allowed.
-  if (sh('tar', ['-tvf', wsTar], { timeout: 60000 }).split('\n').filter(Boolean).some(l => !/^[\-d]/.test(l))) {
-    throw new Error('unsafe workspace tar: only regular files and directories are allowed');
-  }
+  // Parsed strictly (Grok 4.20 R1): no newline-smuggled members.
+  assertRegularFileOrDirMembers(listing, 'workspace tar');
   const extractDirHint = mkdtempSync(join(tmpdir(), 'mig-ws-'));
   try {
-    sh('tar', ['-xf', wsTar, '-C', extractDirHint, '--no-same-owner'], { timeout: 600000 });
-    for (const top of ['workspace', ...Array.from(new Set(members.map(m => m.split('/')[0]).filter(t => t.startsWith('workspace-'))))]) {
+    sh('tar', ['-xf', wsTar, '-C', extractDirHint, '--no-same-owner', '--no-same-permissions', '--no-absolute-names'], { timeout: 600000 });
+    for (const top of ['workspace', ...Array.from(new Set(listing.map(m => m.name.split('/')[0]).filter(t => t.startsWith('workspace-'))))]) {
       const src = join(extractDirHint, top);
       const dst = join(openclawDir, top);
       if (existsSync(src)) {
@@ -136,21 +170,19 @@ export async function unpackBundle(bundlePath, passphrase, stagingDir, expectedC
   const EXPECTED_MEMBERS = new Set(['manifest.json', 'dependency-manifest.json',
     'config.json.tmpl', 'skills-state.json', 'cron-jobs.json',
     'workspaces.tar', 'workspaces.tar.gz', 'keychain.json.enc', 'RUNBOOK.md', '.']);
-  const members = sh('tar', ['-tf', tmpTar], { timeout: 60000 })
-    .split('\n').filter(Boolean);
-  for (const m of members) {
-    const rel = m.replace(/\/+$/, '').replace(/^\.\//, '');
+  const listing = listTarMembersVerbose(tmpTar);
+  for (const m of listing) {
+    const rel = m.name.replace(/\/+$/, '').replace(/^\.\//, '');
     if (rel === '.' || rel === '') continue;
     if (rel.includes('..') || rel.startsWith('/') || /^[A-Za-z]:/.test(rel) || !EXPECTED_MEMBERS.has(rel)) {
-      throw new Error(`unsafe bundle member rejected: ${m}`);
+      throw new Error(`unsafe bundle member rejected: ${m.name}`);
     }
   }
-  // Claude R3 Security fix: whitelist member types (regular files + dirs only).
-  // Reject symlinks (l), hardlinks (h), device nodes (b/c), FIFOs (p).
-  if (sh('tar', ['-tvf', tmpTar], { timeout: 60000 }).split('\n').filter(Boolean).some(l => !/^[\-d]/.test(l))) {
-    throw new Error('unsafe bundle: only regular files and directories are allowed');
-  }
-  sh('tar', ['-xf', tmpTar, '-C', extractDir, '--no-same-owner'], { timeout: 600000 });
+  // Claude R3 + Grok 4.20 R1 Security fix: whitelist member types (regular
+  // files + dirs only). Reject symlinks (l), hardlinks (h), device nodes
+  // (b/c), FIFOs (p). Parsed strictly — newline-smuggled members abort.
+  assertRegularFileOrDirMembers(listing, 'bundle');
+  sh('tar', ['-xf', tmpTar, '-C', extractDir, '--no-same-owner', '--no-same-permissions', '--no-absolute-names'], { timeout: 600000 });
   rmSync(tmpTar, { force: true });
 
   const manifestPath = join(extractDir, 'manifest.json');
@@ -266,7 +298,13 @@ export function restoreKeychain(keychainData, account = process.env.USER || 'ope
     // macOS `security` CLI has NO stdin form: `-w -` stores the literal '-'. The
     // secret appears briefly in argv for the short-lived execFileSync (Grok R7
     // verified: accepted trade-off; process is ours and exits immediately).
-    const r = trySh('security', ['add-generic-password', '-a', acct, '-s', svc, '-w', val], { timeout: 10000 });
+    // Grok 4.20 R1 Correctness fix: when the item already exists and
+    // MIGRATE_OVERWRITE_KEYS is set, `security add-generic-password` must get
+    // -U (update); without it macOS errors (or duplicates) instead of
+    // replacing the existing credential.
+    const addArgs = ['add-generic-password', '-a', acct, '-s', svc, '-w', val];
+    if (exists) addArgs.splice(1, 0, '-U');
+    const r = trySh('security', addArgs, { timeout: 10000 });
     if (r.ok) restored.push(svc); else skipped.push(svc);
   }
   return { restored, skipped };
