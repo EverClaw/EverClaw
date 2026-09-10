@@ -554,11 +554,102 @@ const proxy = httpProxy.createProxyServer({
   xfwd: true,
 });
 
+// ─── Gateway warm-up retry (BACK-IOC-014 follow-up, 2026-09-10) ─────────────
+// The auth-proxy is health-gated BEFORE the OpenClaw gateway starts, so the
+// external endpoint can accept a request while the internal gateway is still
+// booting (plugin load, workspace scan, session restore — 10-30s cold start).
+// Claim-time relabels also restart the container, widening the window.
+// Without a retry, the user lands on a dead-end 502 that looks like failure
+// (regression seen 2026-09-10: first Launch after claim showed 502; only a
+// manual refresh recovered).
+//
+// Fix: on ECONNREFUSED/ECONNRESET from the internal gateway, retry the proxy
+// hop for up to GATEWAY_RETRY_MAX_ATTEMPTS with short backoff. GET requests
+// retry transparently (user just sees a slightly slower first load). Non-GET
+// requests are NOT retried (could double-apply side effects) — they get the
+// auto-refresh HTML page instead. WebSocket upgrades are untouched (the
+// Control UI client reconnects on its own).
+const GATEWAY_RETRY_BASE_MS = 750;     // first backoff step
+const GATEWAY_RETRY_MAX_ATTEMPTS = 12; // ~42s total with backoff
+
+function isGatewayBootError(err) {
+  const code = err && (err.code || err.errno);
+  return code === 'ECONNREFUSED' || code === 'ECONNRESET' || code === 'ECONNABORTED';
+}
+
+function proxyWithBootRetry(req, res, attempt = 0) {
+  req.__bootRetryManaged = true;
+  // Per-attempt error handler. A single finish/close listener pair (attached
+  // below, once per attempt, removed with the error listener in cleanup)
+  // governs lifecycle: no cross-attempt listener stacking (Grok R1-C2).
+  const onError = (error) => {
+    if (settled) return;
+    settled = true;
+    proxy.removeListener('error', onError);
+    res.removeListener('finish', onDone);
+    res.removeListener('close', onDone);
+    console.error(`[proxy] Error (attempt ${attempt + 1}):`, error.message);
+    if (isGatewayBootError(error) && attempt < GATEWAY_RETRY_MAX_ATTEMPTS - 1) {
+      // Client may have gone away while we waited — never retry into a dead res
+      if (res.writableEnded || res.destroyed) return;
+      const delay = Math.min(GATEWAY_RETRY_BASE_MS * Math.pow(1.6, attempt), 5000);
+      console.log(`[proxy] Gateway booting — retry ${attempt + 1}/${GATEWAY_RETRY_MAX_ATTEMPTS} in ${Math.round(delay)}ms`);
+      setTimeout(() => proxyWithBootRetry(req, res, attempt + 1), delay);
+      return;
+    }
+    if (!res.headersSent) {
+      if (req.method === 'GET') {
+        // Auto-refreshing boot page — the browser retries on its own, so the
+        // user never sees a failure state.
+        res.writeHead(502, { 'Content-Type': 'text/html; charset=utf-8', 'Retry-After': '3' });
+        serveBootPageBody(res);
+      } else {
+        res.writeHead(502, { 'Content-Type': 'text/plain' });
+        res.end('Bad Gateway — OpenClaw may still be starting');
+      }
+    }
+  };
+  const onDone = () => {
+    settled = true;
+    proxy.removeListener('error', onError);
+  };
+  let settled = false;
+  res.on('finish', onDone);
+  res.on('close', onDone);
+  proxy.once('error', onError);
+  try {
+    proxy.web(req, res);
+  } catch (err) {
+    onError(err);
+  }
+}
+
+function serveBootPageBody(res) {
+  // Grok R1-S1: no request data interpolated — fixed safe HTML only.
+  res.end(`<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<meta http-equiv="refresh" content="3">
+<title>Starting your agent…</title>
+<style>body{font-family:-apple-system,Segoe UI,sans-serif;background:#faf6ef;color:#333;display:flex;align-items:center;justify-content:center;height:100vh;margin:0}
+.c{text-align:center;max-width:480px;padding:2em}.spin{display:inline-block;width:36px;height:36px;border:4px solid #e5ddd0;border-top-color:#c0392b;border-radius:50%;animation:spin 1s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
+h1{font-size:1.35em;margin:.6em 0}.s{color:#777;font-size:.9em}</style></head>
+<body><div class="c"><div class="spin"></div><h1>Starting your agent…</h1>
+<p>Your agent is booting up. This page continues automatically — usually within a few seconds.</p>
+<p class="s">Taking longer than 45 seconds? <a href="/">Click here to retry</a>.</p></div></body></html>`);
+}
+
 proxy.on('error', (error, req, res) => {
+  // Requests owned by proxyWithBootRetry handle their own errors (retry loop).
+  if (req && req.__bootRetryManaged) return;
   console.error('[proxy] Error:', error.message);
   if (res && typeof res.writeHead === 'function' && !res.headersSent) {
-    res.writeHead(502, { 'Content-Type': 'text/plain' });
-    res.end('Bad Gateway — OpenClaw may still be starting');
+    if (req.method === 'GET') {
+      res.writeHead(502, { 'Content-Type': 'text/html; charset=utf-8', 'Retry-After': '3' });
+      serveBootPageBody(res, req);
+    } else {
+      res.writeHead(502, { 'Content-Type': 'text/plain' });
+      res.end('Bad Gateway — OpenClaw may still be starting');
+    }
   }
 });
 
@@ -1762,7 +1853,7 @@ async function handleRequest(req, res) {
   // Inject verified user identity for OpenClaw trusted-proxy mode
   req.headers['x-forwarded-user'] = session.sub;
 
-  proxy.web(req, res);
+  proxyWithBootRetry(req, res);
 }
 
 // ─── WebSocket Upgrade ──────────────────────────────────────────────────────
