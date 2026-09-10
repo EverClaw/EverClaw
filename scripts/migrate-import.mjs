@@ -94,7 +94,7 @@ function assertRegularFileOrDirMembers(members, what) {
 // move loop (Grok 4.20 R2 Correctness fix): listing names may carry a `./`
 // prefix, which split('/')[0] alone turns into '.' and silently skips the
 // move of every workspace.
-function getSafeTop(name) {
+export function getSafeTop(name) {
   const norm = name.replace(/\/+$/, '').replace(/^\.\//, '');
   if (!norm || norm === '.') return null;
   return norm.split('/')[0];
