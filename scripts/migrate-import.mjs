@@ -548,7 +548,7 @@ function parseArgs(argv) {
   return args;
 }
 
-if (process.argv[1]?.endsWith('migrate-import.mjs')) {
+if (import.meta.main) {
   const args = parseArgs(process.argv.slice(2));
   if (args.help || !args.importPath) {
     console.log(`migrate-import — Full-Host Migration Import (Gap 8)

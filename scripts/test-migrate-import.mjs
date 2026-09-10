@@ -70,7 +70,7 @@ test("getSafeTop: normalizes ./ prefix and trailing slashes", () => {
   assert.equal(getSafeTop("workspace/"), "workspace");
   assert.equal(getSafeTop("./workspace-foo/x"), "workspace-foo");
   assert.equal(getSafeTop("."), null);
-  assert.equal(getSafeTop("/abs"), "abs"); // caller checks startsWith('/') separately
+  assert.equal(getSafeTop("/abs"), ""); // absolute path -> empty top; caller's !top check rejects it
 });
 
 test("getSafeTop: null for empty or dot", () => {
