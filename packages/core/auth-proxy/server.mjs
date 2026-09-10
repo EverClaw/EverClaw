@@ -553,7 +553,7 @@ const proxy = httpProxy.createProxyServer({
   ws: true,
   xfwd: true,
 });
-// Note (Grok R5-C2, verified 2026-09-10): this ProxyServer is NOT a node
+// Note (verified 2026-09-10): this ProxyServer is NOT a node
 // EventEmitter instance — http-proxy ships a custom emitter shim (on/once/
 // removeListener only, no setMaxListeners, no default-10 warning logic), so
 // per-request 'error' listeners here never trip MaxListenersExceededWarning.
@@ -581,62 +581,65 @@ function isGatewayBootError(err) {
   return code === 'ECONNREFUSED' || code === 'ECONNRESET' || code === 'ECONNABORTED';
 }
 
-function proxyWithBootRetry(req, res, attempt = 0) {
+function proxyWithBootRetry(req, res) {
   req.__bootRetryManaged = true;
-  // Raise listener ceilings once per request: each proxy attempt attaches
-  // library listeners to the same req/res (Grok R6-C1/R5-C1).
-  if (attempt === 0) {
-    req.setMaxListeners(50);
-    res.setMaxListeners(50);
-  }
-  let settled = false;
-  let retryTimer = null;
-  // Fresh proxy per attempt: a reused http-proxy instance stacks its
-  // library-added listeners on req/res across retries. A pristine instance
-  // per attempt keeps state clean; it is GC'd once this attempt settles.
-  const attemptProxy = httpProxy.createProxyServer({
-    target: `http://127.0.0.1:${CONFIG.internalPort}`,
-    xfwd: true,
-  });
-  const onError = (error, eventReq) => {
-    if (eventReq && eventReq !== req) return;
-    if (settled) return;
-    settled = true;
-    attemptProxy.removeListener('error', onError);
+  // Listener ceilings: each attempt's proxy attaches library listeners to
+  // the same req/res; raised once for the request lifetime.
+  req.setMaxListeners(50);
+  res.setMaxListeners(50);
+  // Single lifecycle state for the whole retry chain (R7): one settled flag,
+  // one timer slot, one listener pair on res for the entire request.
+  const state = { settled: false, attempt: 0, timer: null };
+
+  const settle = () => {
+    state.settled = true;
+    if (state.timer) clearTimeout(state.timer);
     res.removeListener('finish', onDone);
     res.removeListener('close', onDone);
-    console.error(`[proxy] Error (attempt ${attempt + 1}):`, error.message);
-    if (req.method === 'GET' && isGatewayBootError(error) && attempt < GATEWAY_RETRY_MAX_ATTEMPTS - 1) {
-      if (res.writableEnded || res.destroyed || req.aborted) return;
-      const delay = Math.min(GATEWAY_RETRY_BASE_MS * Math.pow(1.6, attempt), 5000);
-      console.log(`[proxy] Gateway booting — retry ${attempt + 1}/${GATEWAY_RETRY_MAX_ATTEMPTS} in ${Math.round(delay)}ms`);
-      retryTimer = setTimeout(() => {
-        if (res.writableEnded || res.destroyed || req.aborted) return;
-        proxyWithBootRetry(req, res, attempt + 1);
+  };
+  const onDone = () => settle();
+
+  const onError = (error) => {
+    if (state.settled) return;
+    console.error(`[proxy] Error (attempt ${state.attempt + 1}):`, error.message);
+    if (req.method === 'GET' && isGatewayBootError(error) && state.attempt < GATEWAY_RETRY_MAX_ATTEMPTS - 1) {
+      if (res.writableEnded || res.destroyed || req.aborted) { settle(); return; }
+      const delay = Math.min(GATEWAY_RETRY_BASE_MS * Math.pow(1.6, state.attempt), 5000);
+      console.log(`[proxy] Gateway booting — retry ${state.attempt + 1}/${GATEWAY_RETRY_MAX_ATTEMPTS} in ${Math.round(delay)}ms`);
+      state.attempt += 1;
+      state.timer = setTimeout(() => {
+        if (res.writableEnded || res.destroyed || req.aborted) { settle(); return; }
+        attempt();
       }, delay);
       return;
     }
+    settle();
     sendFinalBootError(req, res);
   };
-  const onDone = () => {
-    settled = true;
-    if (retryTimer) clearTimeout(retryTimer);
-    attemptProxy.removeListener('error', onError);
-    res.removeListener('finish', onDone);
-    res.removeListener('close', onDone);
+
+  // Fresh proxy per attempt: a reused instance stacks its library-added
+  // listeners on req/res across retries; a pristine one keeps state clean
+  // and is GC'd when this attempt settles. Each instance serves exactly
+  // this request, so no cross-request error cross-talk.
+  const attempt = () => {
+    if (state.settled) return;
+    const attemptProxy = httpProxy.createProxyServer({
+      target: `http://127.0.0.1:${CONFIG.internalPort}`,
+      xfwd: true,
+    });
+    attemptProxy.on('error', onError);
+    try {
+      attemptProxy.web(req, res);
+    } catch (err) {
+      onError(err);
+    }
   };
+
   res.on('finish', onDone);
   res.on('close', onDone);
-  attemptProxy.on('error', onError);
-  try {
-    attemptProxy.web(req, res);
-  } catch (err) {
-    onError(err);
-  }
+  attempt();
 }
 
-// Single source of truth for the terminal 502 (used by the retry wrapper
-// AND the shared proxy error handler — Grok R6-C2).
 function sendFinalBootError(req, res) {
   if (!res || typeof res.writeHead !== 'function' || res.headersSent) return;
   if (req.method === 'GET') {
@@ -649,7 +652,7 @@ function sendFinalBootError(req, res) {
 }
 
 function bootPageHeaders() {
-  // Grok R2-S1: hardening headers on the boot page
+  // Hardening headers on the boot page
   return {
     'Content-Type': 'text/html; charset=utf-8',
     'Retry-After': '3',
@@ -660,7 +663,7 @@ function bootPageHeaders() {
 }
 
 function serveBootPageBody(res) {
-  // Grok R1-S1: no request data interpolated — fixed safe HTML only.
+  // Static page — no request data interpolated.
   res.end(`<!DOCTYPE html>
 <html><head><meta charset="utf-8">
 <meta http-equiv="refresh" content="3">
@@ -1271,7 +1274,7 @@ async function handleInternalExport(req, res) {
 
   // Child stderr: forward only when AGENT_EXPORT_DEBUG=1 (diagnostics).
   // Otherwise swallow it — the JSON contract is on stdout (maxBuffer 10 MB)
-  // and stderr must not bloat proxy logs (Grok R5-F5 / R6-F4).
+  // and stderr must not bloat proxy logs.
   if (process.env.AGENT_EXPORT_DEBUG === '1') {
     child.stderr?.on('data', (chunk) => {
       process.stderr.write(`[export-child] ${chunk}`);
