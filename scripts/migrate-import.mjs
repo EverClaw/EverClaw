@@ -52,7 +52,9 @@ function trySh(cmd, args, opts = {}) {
 // Crafted listings are bounded the same way as before: every -tvf line must
 // start with a valid type+perms field; name validation runs per -tf line
 // against strict top-level/path rules; extraction uses --no-absolute-names.
-const TAR_TVF_TYPE = /^([bcdhlps-])([rwxStTs-]{9})(?:[ \t]|$)/;
+// Stage 5.2 (Grok 4.5 coverage review): GNU tar may append '+' (ACL) or '.'
+// (SELinux) after the 9 perms — tolerate one such suffix (locked by test).
+const TAR_TVF_TYPE = /^([bcdhlps-])([rwxStTs-]{9})(?:[.+]?)(?:[ \t]|$)/;
 
 export function parseTarTypeField(line) {
   const m = TAR_TVF_TYPE.exec(line);
