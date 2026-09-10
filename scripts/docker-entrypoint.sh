@@ -153,10 +153,9 @@ if [ -f "${WORKSPACE}/IDENTITY.md" ] && \
   # but the scaffold-if-missing loop above never rewrites an existing file — so
   # the UI kept showing "OpenClaw" after a named claim. Same line-anchored ERE
   # shape as the EverClaw upgrade, same atomic write, same idempotency rule:
-  # skipped when TPL_AGENT_NAME is itself "OpenClaw" (nothing to change).
-  if printf '%s' "${TPL_AGENT_NAME}" | LC_ALL=C grep -qE '^[[:space:]]*OpenClaw[[:space:]]*$'; then
-    : # custom name equals the default — default-name upgrade is a no-op
-  elif LC_ALL=C grep -qE '^[[:space:]]*([-*+][[:space:]]*)?(\*\*Name:\*\*|\*\*Name\*\*:|Name:|name:)[[:space:]]*OpenClaw[[:space:]]*$' "${WORKSPACE}/IDENTITY.md"; then
+  # skipped when TPL_AGENT_NAME matches the default (nothing to change).
+  if ! printf '%s' "${TPL_AGENT_NAME}" | LC_ALL=C grep -qE '^[[:space:]]*OpenClaw[[:space:]]*$' \
+     && LC_ALL=C grep -qE '^[[:space:]]*([-*+][[:space:]]*)?(\*\*Name:\*\*|\*\*Name\*\*:|Name:|name:)[[:space:]]*OpenClaw[[:space:]]*$' "${WORKSPACE}/IDENTITY.md"; then
     TMP_IDENTITY_DEFAULT="${WORKSPACE}/.IDENTITY.md.upgrade.$$"
     if LC_ALL=C sed -E \
         -e "s/^([[:space:]]*)([-*+][[:space:]]*)?(\*\*Name:\*\*|\*\*Name\*\*:|Name:|name:)([[:space:]]*)OpenClaw([[:space:]]*)$/\1\2\3\4${SED_AGENT_NAME}\5/" \
