@@ -553,6 +553,10 @@ const proxy = httpProxy.createProxyServer({
   ws: true,
   xfwd: true,
 });
+// Note (Grok R5-C2, verified 2026-09-10): this ProxyServer is NOT a node
+// EventEmitter instance — http-proxy ships a custom emitter shim (on/once/
+// removeListener only, no setMaxListeners, no default-10 warning logic), so
+// per-request 'error' listeners here never trip MaxListenersExceededWarning.
 
 // ─── Gateway warm-up retry (BACK-IOC-014 follow-up, 2026-09-10) ─────────────
 // The auth-proxy is health-gated BEFORE the OpenClaw gateway starts, so the
@@ -635,6 +639,11 @@ function proxyWithBootRetry(req, res, attempt = 0) {
   // keeps the listener alive for this request's own error (concurrency smoke
   // 2026-09-10: 3 parallel GETs against a down gateway hung 2 of 3 with once).
   proxy.on('error', onError);
+  // http-proxy attaches its own listeners to req/res on every proxy.web()
+  // call; retries reuse the same objects, so raise the warning ceiling for
+  // the retry lifetime (Grok R5-C1).
+  req.setMaxListeners(50);
+  res.setMaxListeners(50);
   try {
     proxy.web(req, res);
   } catch (err) {
