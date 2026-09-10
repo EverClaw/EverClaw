@@ -74,6 +74,16 @@ function assertRegularFileOrDirMembers(members, what) {
   }
 }
 
+// Single normalization used by BOTH the workspace-tar validation and the
+// move loop (Grok 4.20 R2 Correctness fix): listing names may carry a `./`
+// prefix, which split('/')[0] alone turns into '.' and silently skips the
+// move of every workspace.
+function getSafeTop(name) {
+  const norm = name.replace(/\/+$/, '').replace(/^\.\//, '');
+  if (!norm || norm === '.') return null;
+  return norm.split('/')[0];
+}
+
 /**
  * Version-aware OpenClaw gateway command (L8).
  * `openclaw restart` does not exist in all versions (proven 2026-08-27).
@@ -104,9 +114,9 @@ export function extractSafeWorkspaces(wsTar, openclawDir) {
   for (const m of listing) {
     const norm = m.name.replace(/\/+$/, '').replace(/^\.\//, '');
     if (norm === '.' || norm === '') continue;
-    const top = norm.split('/')[0];
-    const okTop = top === 'workspace' || top.startsWith('workspace-');
-    if (!okTop || norm.includes('..') || norm.startsWith('/') || /^[A-Za-z]:/.test(norm)) {
+    const top = getSafeTop(m.name);
+    const okTop = top === 'workspace' || (top !== null && top.startsWith('workspace-'));
+    if (!top || !okTop || norm.includes('..') || norm.startsWith('/') || /^[A-Za-z]:/.test(norm)) {
       bad.push(m.name);
     }
   }
@@ -121,7 +131,7 @@ export function extractSafeWorkspaces(wsTar, openclawDir) {
   const extractDirHint = mkdtempSync(join(tmpdir(), 'mig-ws-'));
   try {
     sh('tar', ['-xf', wsTar, '-C', extractDirHint, '--no-same-owner', '--no-same-permissions', '--no-absolute-names'], { timeout: 600000 });
-    for (const top of ['workspace', ...Array.from(new Set(listing.map(m => m.name.split('/')[0]).filter(t => t.startsWith('workspace-'))))]) {
+    for (const top of ['workspace', ...Array.from(new Set(listing.map(m => getSafeTop(m.name)).filter(t => t !== null && t.startsWith('workspace-'))))]) {
       const src = join(extractDirHint, top);
       const dst = join(openclawDir, top);
       if (existsSync(src)) {
@@ -301,9 +311,12 @@ export function restoreKeychain(keychainData, account = process.env.USER || 'ope
     // Grok 4.20 R1 Correctness fix: when the item already exists and
     // MIGRATE_OVERWRITE_KEYS is set, `security add-generic-password` must get
     // -U (update); without it macOS errors (or duplicates) instead of
-    // replacing the existing credential.
-    const addArgs = ['add-generic-password', '-a', acct, '-s', svc, '-w', val];
-    if (exists) addArgs.splice(1, 0, '-U');
+    // replacing the existing credential. -U is an option (getopt): it can sit
+    // anywhere among the options, so place it right after the command name
+    // rather than splicing (Grok 4.20 R2: splice at index 1 was brittle).
+    const addArgs = ['add-generic-password'];
+    if (exists) addArgs.push('-U');
+    addArgs.push('-a', acct, '-s', svc, '-w', val);
     const r = trySh('security', addArgs, { timeout: 10000 });
     if (r.ok) restored.push(svc); else skipped.push(svc);
   }
