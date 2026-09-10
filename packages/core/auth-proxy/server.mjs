@@ -583,71 +583,68 @@ function isGatewayBootError(err) {
 
 function proxyWithBootRetry(req, res, attempt = 0) {
   req.__bootRetryManaged = true;
+  // Raise listener ceilings once per request: each proxy attempt attaches
+  // library listeners to the same req/res (Grok R6-C1/R5-C1).
+  if (attempt === 0) {
+    req.setMaxListeners(50);
+    res.setMaxListeners(50);
+  }
   let settled = false;
   let retryTimer = null;
-  // Per-attempt error handler. A single finish/close listener pair (attached
-  // below, once per attempt, removed with the error listener in cleanup)
-  // governs lifecycle: no cross-attempt listener stacking (Grok R1-C2).
+  // Fresh proxy per attempt: a reused http-proxy instance stacks its
+  // library-added listeners on req/res across retries. A pristine instance
+  // per attempt keeps state clean; it is GC'd once this attempt settles.
+  const attemptProxy = httpProxy.createProxyServer({
+    target: `http://127.0.0.1:${CONFIG.internalPort}`,
+    xfwd: true,
+  });
   const onError = (error, eventReq) => {
-    // Cross-talk guard: the proxy is a shared EventEmitter — an error for
-    // request A fires ALL attached listeners, including this request's.
-    // Only act on errors for THIS request (Grok R4-C1).
     if (eventReq && eventReq !== req) return;
     if (settled) return;
     settled = true;
-    proxy.removeListener('error', onError);
+    attemptProxy.removeListener('error', onError);
     res.removeListener('finish', onDone);
     res.removeListener('close', onDone);
     console.error(`[proxy] Error (attempt ${attempt + 1}):`, error.message);
-    // Grok R2-C1: only GET is retried — no request body to double-consume, no
-    // side effects. Non-GET falls through to the plain-text 502 immediately.
     if (req.method === 'GET' && isGatewayBootError(error) && attempt < GATEWAY_RETRY_MAX_ATTEMPTS - 1) {
-      // Client may have gone away while we waited — never retry into a dead res
       if (res.writableEnded || res.destroyed || req.aborted) return;
       const delay = Math.min(GATEWAY_RETRY_BASE_MS * Math.pow(1.6, attempt), 5000);
       console.log(`[proxy] Gateway booting — retry ${attempt + 1}/${GATEWAY_RETRY_MAX_ATTEMPTS} in ${Math.round(delay)}ms`);
       retryTimer = setTimeout(() => {
-        // Aborted during backoff — stop the chain (Grok R2-C2)
         if (res.writableEnded || res.destroyed || req.aborted) return;
         proxyWithBootRetry(req, res, attempt + 1);
       }, delay);
       return;
     }
-    if (!res.headersSent) {
-      if (req.method === 'GET') {
-        res.writeHead(502, bootPageHeaders());
-        serveBootPageBody(res);
-      } else {
-        res.writeHead(502, { 'Content-Type': 'text/plain' });
-        res.end('Bad Gateway — OpenClaw may still be starting');
-      }
-    }
+    sendFinalBootError(req, res);
   };
   const onDone = () => {
     settled = true;
     if (retryTimer) clearTimeout(retryTimer);
-    proxy.removeListener('error', onError);
+    attemptProxy.removeListener('error', onError);
     res.removeListener('finish', onDone);
     res.removeListener('close', onDone);
   };
   res.on('finish', onDone);
   res.on('close', onDone);
-  // 'on', not 'once': the proxy is a shared EventEmitter — an unrelated
-  // request's error would consume a 'once' listener while our eventReq guard
-  // merely returns early, leaving this request without a handler when its own
-  // error later fires (hang). 'on' + explicit removeListener in onError/onDone
-  // keeps the listener alive for this request's own error (concurrency smoke
-  // 2026-09-10: 3 parallel GETs against a down gateway hung 2 of 3 with once).
-  proxy.on('error', onError);
-  // http-proxy attaches its own listeners to req/res on every proxy.web()
-  // call; retries reuse the same objects, so raise the warning ceiling for
-  // the retry lifetime (Grok R5-C1).
-  req.setMaxListeners(50);
-  res.setMaxListeners(50);
+  attemptProxy.on('error', onError);
   try {
-    proxy.web(req, res);
+    attemptProxy.web(req, res);
   } catch (err) {
     onError(err);
+  }
+}
+
+// Single source of truth for the terminal 502 (used by the retry wrapper
+// AND the shared proxy error handler — Grok R6-C2).
+function sendFinalBootError(req, res) {
+  if (!res || typeof res.writeHead !== 'function' || res.headersSent) return;
+  if (req.method === 'GET') {
+    res.writeHead(502, bootPageHeaders());
+    serveBootPageBody(res);
+  } else {
+    res.writeHead(502, { 'Content-Type': 'text/plain' });
+    res.end('Bad Gateway — OpenClaw may still be starting');
   }
 }
 
@@ -680,15 +677,7 @@ proxy.on('error', (error, req, res) => {
   // Requests owned by proxyWithBootRetry handle their own errors (retry loop).
   if (req && req.__bootRetryManaged) return;
   console.error('[proxy] Error:', error.message);
-  if (res && typeof res.writeHead === 'function' && !res.headersSent) {
-    if (req.method === 'GET') {
-      res.writeHead(502, bootPageHeaders());
-      serveBootPageBody(res);
-    } else {
-      res.writeHead(502, { 'Content-Type': 'text/plain' });
-      res.end('Bad Gateway — OpenClaw may still be starting');
-    }
-  }
+  sendFinalBootError(req, res);
 });
 
 // ─── Request Handler ─────────────────────────────────────────────────────────
