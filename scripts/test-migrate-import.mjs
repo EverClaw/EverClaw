@@ -405,17 +405,18 @@ test("restoreConfig: {{HOME}} substitution + JSON validation + 0600 + force", ()
   const ocDir = join(d, "openclaw");
   const target = join(ocDir, "openclaw.json");
   const tmpl = '{"home":"{{HOME}}","nested":{"path":"{{HOME}}/x"}}';
-  const p = restoreConfig(tmpl, "/Users/fakeuser", ocDir, false);
+  const fakeHome = join(tmpdir(), "fakehome-usr"); // avoid literal /Users/<name> — trips PII Guard builtin pattern
+  const p = restoreConfig(tmpl, fakeHome, ocDir, false);
   assert.equal(p, target);
   const parsed = JSON.parse(readFileSync(target, "utf8"));
-  assert.equal(parsed.home, "/Users/fakeuser");
-  assert.equal(parsed.nested.path, "/Users/fakeuser/x");
+  assert.equal(parsed.home, fakeHome);
+  assert.equal(parsed.nested.path, `${fakeHome}/x`);
   const mode = (execFileSync("stat", ["-f", "%Lp", target], { encoding: "utf8" })).trim();
   assert.equal(mode, "600");
   // Exists + no force -> throw
-  assert.throws(() => restoreConfig(tmpl, "/Users/fakeuser", ocDir, false), /exists/);
+  assert.throws(() => restoreConfig(tmpl, fakeHome, ocDir, false), /exists/);
   // Invalid JSON template -> throw before write
-  assert.throws(() => restoreConfig("{not json", "/Users/fakeuser", ocDir, true), /Unexpected|JSON/);
+  assert.throws(() => restoreConfig("{not json", fakeHome, ocDir, true), /Unexpected|JSON/);
   // Force -> overwrite
   restoreConfig('{"v":2}', "/x", ocDir, true);
   assert.equal(JSON.parse(readFileSync(target, "utf8")).v, 2);
