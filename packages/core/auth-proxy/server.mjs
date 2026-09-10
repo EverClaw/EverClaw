@@ -579,6 +579,8 @@ function isGatewayBootError(err) {
 
 function proxyWithBootRetry(req, res, attempt = 0) {
   req.__bootRetryManaged = true;
+  let settled = false;
+  let retryTimer = null;
   // Per-attempt error handler. A single finish/close listener pair (attached
   // below, once per attempt, removed with the error listener in cleanup)
   // governs lifecycle: no cross-attempt listener stacking (Grok R1-C2).
@@ -596,12 +598,11 @@ function proxyWithBootRetry(req, res, attempt = 0) {
       if (res.writableEnded || res.destroyed || req.aborted) return;
       const delay = Math.min(GATEWAY_RETRY_BASE_MS * Math.pow(1.6, attempt), 5000);
       console.log(`[proxy] Gateway booting — retry ${attempt + 1}/${GATEWAY_RETRY_MAX_ATTEMPTS} in ${Math.round(delay)}ms`);
-      const timer = setTimeout(() => {
+      retryTimer = setTimeout(() => {
         // Aborted during backoff — stop the chain (Grok R2-C2)
         if (res.writableEnded || res.destroyed || req.aborted) return;
         proxyWithBootRetry(req, res, attempt + 1);
       }, delay);
-      req.once('close', () => clearTimeout(timer));
       return;
     }
     if (!res.headersSent) {
@@ -616,9 +617,11 @@ function proxyWithBootRetry(req, res, attempt = 0) {
   };
   const onDone = () => {
     settled = true;
+    if (retryTimer) clearTimeout(retryTimer);
     proxy.removeListener('error', onError);
+    res.removeListener('finish', onDone);
+    res.removeListener('close', onDone);
   };
-  let settled = false;
   res.on('finish', onDone);
   res.on('close', onDone);
   proxy.once('error', onError);
@@ -660,8 +663,8 @@ proxy.on('error', (error, req, res) => {
   console.error('[proxy] Error:', error.message);
   if (res && typeof res.writeHead === 'function' && !res.headersSent) {
     if (req.method === 'GET') {
-      res.writeHead(502, { 'Content-Type': 'text/html; charset=utf-8', 'Retry-After': '3' });
-      serveBootPageBody(res, req);
+      res.writeHead(502, bootPageHeaders());
+      serveBootPageBody(res);
     } else {
       res.writeHead(502, { 'Content-Type': 'text/plain' });
       res.end('Bad Gateway — OpenClaw may still be starting');
