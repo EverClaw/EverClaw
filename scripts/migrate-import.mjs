@@ -48,7 +48,24 @@ function trySh(cmd, args, opts = {}) {
 // is parsed as a valid-looking second line, defeating the type/name checks.
 // Require EVERY non-empty line to match the exact POSIX verbose format, and
 // reject names containing embedded newlines outright.
-const TAR_TVF_LINE = /^([bcdhlps-])([rwxStTs-]{9})\s+(\S+)\s+(\S+)\s+(\d+)\s+(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2})\s+(.+)$/;
+// Two accepted `tar -tvf` line formats (Grok 4.20 R3 Correctness fix — a single
+// rigid POSIX-ISO pattern rejected legitimate bundles):
+//   GNU:   -rw-r--r-- user/group 123 Sep 10 12:00 name
+//   BSD:   -rw-r--r-- 0 user staff 123 Sep 10 12:00 name   (macOS bsdtar)
+// In both, the NAME is the final field of a full-line match; the type char is
+// group 1. A crafted member with an embedded newline cannot match either
+// full-line pattern (its line breaks apart), so the archive is rejected.
+// Owner/group tokens may contain spaces, so greedy capture for the name tail.
+// Date/time after size is 2-4 tokens: 'Sep 10 12:00' (3), 'Oct 1 2025' (3),
+// '2026-09-10 12:00' (2), '2026-09-10 12:00:00' + tz (3-4), GNU --full-time (4).
+const TAR_TVF_GNU = /^([bcdhlps-])([rwxStTs-]{9})\s+\S+\s+\d+\s+(?:\S+\s+){2,4}(.+)$/;
+const TAR_TVF_BSD = /^([bcdhlps-])([rwxStTs-]{9})\s+\d+\s+\S+\s+\S+\s+\d+\s+(?:\S+\s+){2,4}(.+)$/;
+
+export function parseTarVerboseLine(line) {
+  const m = TAR_TVF_GNU.exec(line) || TAR_TVF_BSD.exec(line);
+  if (!m) return null;
+  return { type: m[1], perms: m[2], name: m[3].trim() };
+}
 
 function listTarMembersVerbose(tarPath, timeout = 60000) {
   const out = sh('tar', ['-tvf', tarPath], { timeout });
@@ -56,13 +73,12 @@ function listTarMembersVerbose(tarPath, timeout = 60000) {
   for (const rawLine of out.split('\n')) {
     const line = rawLine.replace(/\r$/, '');
     if (!line.trim()) continue;
-    const m = TAR_TVF_LINE.exec(line);
-    if (!m) throw new Error(`unsafe archive listing line (crafted member?): ${line.slice(0, 80)}`);
-    const name = m[8];
-    if (name.includes('\n') || name.includes('\r')) {
-      throw new Error(`unsafe archive member name (embedded newline): ${name.slice(0, 80)}`);
+    const parsed = parseTarVerboseLine(line);
+    if (!parsed) throw new Error(`unsafe archive listing line (crafted member?): ${line.slice(0, 80)}`);
+    if (parsed.name.includes('\n') || parsed.name.includes('\r')) {
+      throw new Error(`unsafe archive member name (embedded newline): ${parsed.name.slice(0, 80)}`);
     }
-    members.push({ type: m[1], perms: m[2], owner: m[3], group: m[4], size: Number(m[5]), date: m[6], time: m[7], name });
+    members.push({ type: parsed.type, perms: parsed.perms, name: parsed.name });
   }
   return members;
 }
@@ -304,7 +320,10 @@ export function restoreKeychain(keychainData, account = process.env.USER || 'ope
     const val = typeof item === 'string' ? item : item.value;
     const acct = typeof item === 'object' && item?.account ? item.account : account;
     const exists = trySh('security', ['find-generic-password', '-a', acct, '-s', svc, '-w'], { timeout: 10000 }).ok;
-    if (exists && !process.env.MIGRATE_OVERWRITE_KEYS) { skipped.push(svc); continue; }
+    // Grok 4.20 R3 fix: env values are always strings — '0'/'false' must NOT
+    // count as enabled.
+    const overwrite = ['1', 'true', 'yes'].includes((process.env.MIGRATE_OVERWRITE_KEYS || '').toLowerCase());
+    if (exists && !overwrite) { skipped.push(svc); continue; }
     // macOS `security` CLI has NO stdin form: `-w -` stores the literal '-'. The
     // secret appears briefly in argv for the short-lived execFileSync (Grok R7
     // verified: accepted trade-off; process is ours and exits immediately).
