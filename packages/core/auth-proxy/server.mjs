@@ -584,7 +584,11 @@ function proxyWithBootRetry(req, res, attempt = 0) {
   // Per-attempt error handler. A single finish/close listener pair (attached
   // below, once per attempt, removed with the error listener in cleanup)
   // governs lifecycle: no cross-attempt listener stacking (Grok R1-C2).
-  const onError = (error) => {
+  const onError = (error, eventReq) => {
+    // Cross-talk guard: the proxy is a shared EventEmitter — an error for
+    // request A fires ALL attached listeners, including this request's.
+    // Only act on errors for THIS request (Grok R4-C1).
+    if (eventReq && eventReq !== req) return;
     if (settled) return;
     settled = true;
     proxy.removeListener('error', onError);
@@ -624,7 +628,13 @@ function proxyWithBootRetry(req, res, attempt = 0) {
   };
   res.on('finish', onDone);
   res.on('close', onDone);
-  proxy.once('error', onError);
+  // 'on', not 'once': the proxy is a shared EventEmitter — an unrelated
+  // request's error would consume a 'once' listener while our eventReq guard
+  // merely returns early, leaving this request without a handler when its own
+  // error later fires (hang). 'on' + explicit removeListener in onError/onDone
+  // keeps the listener alive for this request's own error (concurrency smoke
+  // 2026-09-10: 3 parallel GETs against a down gateway hung 2 of 3 with once).
+  proxy.on('error', onError);
   try {
     proxy.web(req, res);
   } catch (err) {
