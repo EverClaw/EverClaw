@@ -2,6 +2,22 @@
 
 All notable changes to EverClaw are documented here.
 
+## [Unreleased] - 2026-09-10
+
+### Fixed — migrate-import tar type-field parsing + SOP-001 Stage 5 hardening
+
+**Implementation (re-audited, Claude Opus 4.8: Excellent / 0 blocking):**
+
+- `TAR_TVF_TYPE` regex now tolerates one optional trailing `+` (GNU ACL) or `.` (SELinux) marker after the 9 permission chars in `tar -tvf` listings. GNU tar appends these on systems with ACLs/SELinux; the old regex aborted the whole listing (fail-closed, but broke legitimate GNU-tar exports). The suffix cannot enter the type or perms captures; the field delimiter remains mandatory.
+
+**Test coverage (Grok 4.5 review R1 Flawed → R3 PASS / 0 blocking; suite 33 → 39 tests):**
+
+- Real hostile fixtures replace synthetic checks: workspace tar with symlink member (rejected, nothing extracted); outer bundle with an **allowlisted member name but hostile type** (symlink named `RUNBOOK.md` → `unsafe bundle: member type 'l' not allowed`); hostile outer member names rejected.
+- `unpackBundle`: happy path, out-of-band checksum mismatch, wrong passphrase (generic error, no oracle), missing `checksums` object, **phantom checksum entry** (checksums key for a file absent from the tar → `missing` branch), tampered payload (decrypt → modify → re-encrypt), unsupported schema version.
+- `importMigrateBundle` end-to-end: dry-run writes nothing; happy path restores config/workspaces/skills/runbook; **passphrase gate** (missing or <16 chars refused before any work); **preflight hard block** (existing config + no force → refused, file untouched); **keychain seam** (`keychain.json.enc` → decrypt → `security add-generic-password` with decrypted value + source account, verified via `security` shim); **cron staging** (`pending-cron-import.json` written — primary keeps enablement, worker disables all, L4/L5).
+- Unit coverage added for `preflight`, `restoreConfig`, `restoreKeychain`, `reenableSkills`, `stageCronImport`.
+- Regression gate: baseline == post-change (337/317/20, zero new failures). Stage 6 PII: 0 findings.
+
 ## [Unreleased] - 2026-09-08
 
 ### Fixed — Stale IDENTITY.md upgrade: EverClaw → resolved agent name (BACK-IOC-012 follow-up)

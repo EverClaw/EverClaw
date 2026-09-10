@@ -2849,6 +2849,11 @@ node scripts/buddy-export.mjs --import ~/alice-backup.tar.gz --force
 
 ## Changelog
 
+### 2026.9.10
+- **migrate-import hardening** — tar type-field regex tolerates GNU ACL (`+`) / SELinux (`.`) suffixes; delta re-audited (Claude Opus 4.8, Excellent / 0 blocking)
+- **Stage 5.2 coverage expansion** — suite 33 → 39 tests: real hostile archive fixtures (outer-bundle allowlisted-name symlink rejected), phantom-checksum refusal, orchestrator passphrase gate, preflight hard block, keychain decrypt→restore seam, cron staging e2e (primary/worker)
+- **Grok 4.5 coverage review** — R1 Flawed → R3 PASS, 0 blocking findings
+
 ### 2026.8.20.0917
 - **OpenClaw pin** v2026.5.27 → v2026.7.1-2
 - **Upstream highlights (v2026.7.1-2):**
