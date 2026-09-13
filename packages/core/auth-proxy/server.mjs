@@ -243,6 +243,60 @@ async function validateConfig() {
 const consumedHandoffTokens = new Map();
 const HANDOFF_TOKEN_TTL_MS = 90_000; // 90 seconds (matches JWT TTL)
 
+// ─── BACK-IOC-016: Handoff observability counters ───────────────────────────
+// In-memory counters for every SSO handoff outcome. Exposed via /health
+// (aggregate counts only, no PII) and /internal/diag (adds a bounded
+// recent-events ring buffer). Resets on process restart.
+// Companion durable (DB) counters for the generate side live in the
+// handoff_events table (Edge Function side). Container-side rejections are
+// ALSO emitted as structured ISO-prefixed log lines:
+//   [handoff] <ISO> <EVENT> <detail...>
+// so fleet-wide aggregation via fred-ops logs stays possible.
+const HANDOFF_METRIC_EVENTS = [
+  'no_token', 'rate_limited', 'jwt_failed', 'already_consumed_inmem',
+  'fqdn_mismatch', 'owner_check_failed', 'owner_verify_error',
+  'db_rejected', 'success', 'error', 'sso_disabled',
+];
+const handoffMetrics = {
+  since: new Date().toISOString(),
+  counters: Object.fromEntries(HANDOFF_METRIC_EVENTS.map((e) => [e, 0])),
+  lastEvents: [], // ring buffer, newest last, max 20 entries
+};
+const HANDOFF_LAST_EVENTS_MAX = 20;
+
+function recordHandoffMetric(event, detail) {
+  if (!(event in handoffMetrics.counters)) {
+    // Unknown event names still count (future-proof) but keep the map shape.
+    handoffMetrics.counters[event] = 0;
+  }
+  handoffMetrics.counters[event] += 1;
+  // Ring-buffer entries carry NO sub/jti/email — /health is unauthenticated.
+  // Identifying detail goes to structured logs only.
+  handoffMetrics.lastEvents.push({ at: new Date().toISOString(), event, detail: detail || null });
+  if (handoffMetrics.lastEvents.length > HANDOFF_LAST_EVENTS_MAX) {
+    handoffMetrics.lastEvents.shift();
+  }
+}
+
+function getHandoffMetricsSnapshot() {
+  return {
+    since: handoffMetrics.since,
+    counters: { ...handoffMetrics.counters },
+    lastEvents: handoffMetrics.lastEvents.slice(-HANDOFF_LAST_EVENTS_MAX),
+  };
+}
+
+// Structured handoff log line: ISO-8601 timestamp + stable event token.
+// Keeps the legacy `[handoff]` prefix so existing fred-ops grep patterns work.
+// Event tokens match the generate-side log vocabulary so fleet grep aggregates cleanly.
+function handoffLog(event, message) {
+  console.log(`[handoff] ${new Date().toISOString()} ${event} ${message}`);
+}
+
+function handoffLogError(event, message) {
+  console.error(`[handoff] ${new Date().toISOString()} ${event} ${message}`);
+}
+
 // Prune expired entries every 30 seconds to prevent memory leak
 setInterval(() => {
   const now = Date.now();
@@ -273,13 +327,13 @@ async function dbConsumeHandoffToken(jti) {
       return { consumed: false, error: 'already_consumed' };
     }
     if (!resp.ok) {
-      console.error(`[handoff] consume-handoff returned ${resp.status}`);
+      handoffLogError('CONSUME_HTTP_ERROR', `consume-handoff returned ${resp.status}`);
       return { consumed: false, error: 'db_error' };
     }
     const result = await resp.json();
     return { consumed: !!result.consumed };
   } catch (err) {
-    console.error(`[handoff] consume-handoff error: ${err.message}`);
+    handoffLogError('CONSUME_FETCH_ERROR', `consume-handoff error: ${err.message}`);
     return { consumed: false, error: 'db_unavailable' };
   }
 }
@@ -1099,7 +1153,11 @@ async function handleInternalDiag(req, res) {
     res.end(JSON.stringify({ error: 'unauthorized' }));
     return;
   }
-  const payload = await getDiagnostics();
+  const base = await getDiagnostics();
+  // BACK-IOC-016: handoff metrics added OUTSIDE the cached payload —
+  // getDiagnostics() caches for DIAG_CACHE_TTL_MS and counters must be fresh.
+  // Shallow-copy so the cached object is never mutated (Grok IOC-016 R1).
+  const payload = { ...base, handoff: getHandoffMetricsSnapshot() };
   res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
   res.end(JSON.stringify(payload));
 }
@@ -1544,6 +1602,13 @@ async function handleRequest(req, res) {
         dynamicOwner: DYNAMIC_OWNER_MODE,
       },
       cig: fqdnStatus,
+      // BACK-IOC-016: aggregate handoff counters ONLY (counts, no detail, no
+      // PII — /health is unauthenticated). Full snapshot incl. recent-events
+      // ring buffer is on /internal/diag (binding-secret gated).
+      handoff: {
+        since: handoffMetrics.since,
+        counters: { ...handoffMetrics.counters },
+      },
     }));
     return;
   }
@@ -1678,6 +1743,10 @@ async function handleRequest(req, res) {
   if (pathname === '/auth/handoff' && req.method === 'POST') {
     // SSO disabled — don't waste rate-limit slots or attempt JWT verify with empty key
     if (!CONFIG.handoffSigningSecret) {
+      // Dedicated counter: must NOT pollute jwt_failed (Grok IOC-016 R1 —
+      // fleet greps would misread disabled containers as verify failures).
+      recordHandoffMetric('sso_disabled');
+      handoffLog('SSO_DISABLED', 'SSO disabled — serving login page (404)');
       serveLoginPage(res, 404);
       return;
     }
@@ -1685,6 +1754,8 @@ async function handleRequest(req, res) {
     // Rate limit: 5 attempts per minute per IP (shared AUTH_RATE_LIMIT)
     const handoffIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket.remoteAddress || 'unknown';
     if (isRateLimited(handoffIp)) {
+      recordHandoffMetric('rate_limited');
+      handoffLog('RATE_LIMITED', `ip=${handoffIp}`);
       res.writeHead(429, { 'Content-Type': 'application/json', 'Retry-After': '60' });
       res.end(JSON.stringify({ error: 'rate_limited', retryAfter: 60 }));
       return;
@@ -1707,7 +1778,8 @@ async function handleRequest(req, res) {
       const token = params.get('token');
 
       if (!token || typeof token !== 'string') {
-        console.log('[handoff] No token in POST body');
+        recordHandoffMetric('no_token');
+        handoffLog('NO_TOKEN', 'no token in POST body');
         serveLoginPage(res, 401);
         return;
       }
@@ -1721,7 +1793,8 @@ async function handleRequest(req, res) {
         });
         handoffPayload = payload;
       } catch (jwtErr) {
-        console.log(`[handoff] JWT verification failed: ${jwtErr.code || jwtErr.message}`);
+        recordHandoffMetric('jwt_failed', jwtErr.code || jwtErr.message);
+        handoffLog('JWT_FAILED', `JWT verification failed: ${jwtErr.code || jwtErr.message}`);
         serveLoginPage(res, 401);
         return;
       }
@@ -1729,14 +1802,19 @@ async function handleRequest(req, res) {
       // Validate required claims
       const { sub, fqdn: tokenFqdn, jti } = handoffPayload;
       if (!sub || !tokenFqdn || !jti) {
-        console.log('[handoff] Missing required claims (sub, fqdn, jti)');
+        recordHandoffMetric('jwt_failed', 'missing_claims');
+        handoffLog('JWT_FAILED', 'Missing required claims (sub, fqdn, jti)');
         serveLoginPage(res, 401);
         return;
       }
 
       // Single-use enforcement: check in-memory Map first (fast path only — don't consume yet)
       if (consumedHandoffTokens.has(jti)) {
-        console.log(`[handoff] Token already consumed (in-memory): jti=${jti}`);
+        // POISON-LOOP SIGNATURE: if this fires repeatedly for DISTINCT jti values
+        // after the BACK-IOC-020 fleet-wide deploy, a container is missing
+        // CONSUME_HANDOFF_URL (in-memory fallback active) → rebuild via upgrade-container.
+        recordHandoffMetric('already_consumed_inmem', `jti=${String(jti).slice(0, 8)}…`);
+        handoffLog('ALREADY_CONSUMED_INMEM', `Token already consumed (in-memory): jti=${jti}`);
         serveLoginPage(res, 401);
         return;
       }
@@ -1747,7 +1825,8 @@ async function handleRequest(req, res) {
       const tokenFqdnLower = String(tokenFqdn).toLowerCase();
 
       if (tokenFqdnLower !== expectedFqdn) {
-        console.log(`[handoff] FQDN mismatch: token=${tokenFqdnLower} expected=${expectedFqdn}`);
+        recordHandoffMetric('fqdn_mismatch', `token=${tokenFqdnLower.slice(0, 24)}…`);
+        handoffLog('FQDN_MISMATCH', `FQDN mismatch: token=${tokenFqdnLower} expected=${expectedFqdn}`);
         serveLoginPage(res, 403);
         return;
       }
@@ -1769,19 +1848,22 @@ async function handleRequest(req, res) {
           });
 
           if (!verifyResp.ok) {
-            console.log(`[handoff] verify-owner returned ${verifyResp.status}`);
+            recordHandoffMetric('owner_check_failed', `status=${verifyResp.status}`);
+            handoffLog('OWNER_CHECK_FAILED', `verify-owner returned ${verifyResp.status}`);
             serveLoginPage(res, 403);
             return;
           }
 
           const result = await verifyResp.json();
           if (!result.authorized) {
-            console.log(`[handoff] Owner check failed: sub=${sub} fqdn=${expectedFqdn}`);
+            recordHandoffMetric('owner_check_failed', 'not_authorized');
+            handoffLog('OWNER_CHECK_FAILED', `Owner check failed: sub=${String(sub).slice(0, 16)}… fqdn=${expectedFqdn}`);
             serveLoginPage(res, 403);
             return;
           }
         } catch (fetchErr) {
-          console.error(`[handoff] verify-owner error: ${fetchErr.message}`);
+          recordHandoffMetric('owner_verify_error', String(fetchErr.message).slice(0, 80));
+          handoffLogError('OWNER_VERIFY_ERROR', `verify-owner error: ${fetchErr.message}`);
           serveLoginPage(res, 403);
           return;
         }
@@ -1791,7 +1873,8 @@ async function handleRequest(req, res) {
       const dbResult = await dbConsumeHandoffToken(jti);
       if (!dbResult.consumed) {
         // DB says already consumed or unavailable — fail closed
-        console.log(`[handoff] Token rejected by DB: jti=${jti} reason=${dbResult.error}`);
+        recordHandoffMetric('db_rejected', `${dbResult.error} jti=${String(jti).slice(0, 8)}…`);
+        handoffLog('DB_REJECTED', `Token rejected by DB: jti=${jti} reason=${dbResult.error}`);
         serveLoginPage(res, 401);
         return;
       }
@@ -1803,7 +1886,10 @@ async function handleRequest(req, res) {
       const sessionValue = signSession(sub);
       const cookieOpts = getCookieOptions(req);
 
-      console.log(`[handoff] ✓ SSO handoff successful: sub=${sub} fqdn=${expectedFqdn} jti=${jti}`);
+      // BACK-IOC-016: single success log line, truncated identifiers (legacy
+      // full-sub/jti line removed per Grok IOC-016 R1 log-hygiene finding).
+      handoffLog('SUCCESS', `SSO handoff successful: sub=${String(sub).slice(0, 16)}… fqdn=${expectedFqdn} jti=${String(jti).slice(0, 8)}…`);
+      recordHandoffMetric('success');
 
       res.writeHead(302, {
         'Set-Cookie': cookie.serialize(COOKIE_NAME, sessionValue, cookieOpts),
@@ -1812,7 +1898,8 @@ async function handleRequest(req, res) {
       res.end();
       return;
     } catch (error) {
-      console.error('[handoff] Error:', error.message);
+      recordHandoffMetric('error', String(error.message).slice(0, 80));
+      handoffLogError('ERROR', `Handoff error: ${error.message}`);
       serveLoginPage(res, 500);
       return;
     }
