@@ -357,6 +357,64 @@ export async function encryptFileStreaming(inputPath, outputPath, passphrase) {
 }
 
 /**
+ * Diagnose WHY a .enc file fails to decrypt (BACK-IOC-028).
+ * Distinguishes: (a) wrong passphrase on a valid bundle, (b) the file is not
+ * a bundle at all (HTML/JSON error page saved by the browser, e.g. an expired
+ * signed URL), (c) an openssl-encrypted file (user used the wrong tool),
+ * (d) truncation/corruption, (e) too-small/empty file.
+ * Returns { kind, likelyCause, detail } — never throws.
+ */
+export async function diagnoseEncFile(inputPath) {
+  const fs = await import('node:fs/promises');
+  try {
+    const stat = await fs.stat(inputPath);
+    if (stat.size < 44) {
+      return { kind: 'too_small', likelyCause: 'file is not a bundle (truncated download or error page)', detail: `size=${stat.size} bytes (min 44)` };
+    }
+    // Read first 512 bytes for signature sniffing.
+    const fd = await fs.open(inputPath, 'r');
+    const head = Buffer.alloc(Math.min(512, stat.size));
+    await fd.read(head, 0, head.length, 0);
+    await fd.close();
+    const headStr = head.toString('utf8').replace(/[^\x20-\x7E\t\r\n]/g, '.');
+    if (/^\s*<(!doctype|html)/i.test(headStr)) {
+      return { kind: 'html', likelyCause: 'the browser saved an HTML error page, not the bundle (expired or dead download link)', detail: headStr.slice(0, 120) };
+    }
+    if (/^\s*[{\[]/.test(headStr)) {
+      return { kind: 'json', likelyCause: 'the browser saved a JSON error/response body, not the bundle', detail: headStr.slice(0, 120) };
+    }
+    if (headStr.startsWith('Salted__')) {
+      return { kind: 'openssl_salted', likelyCause: 'this file was encrypted with the openssl CLI, not the agent exporter — decrypt it with openssl, not migrate-import.mjs', detail: 'Salted__ header detected' };
+    }
+    if (/^\x1f\x8b/.test(head)) {
+      return { kind: 'plain_gzip', likelyCause: 'file is a plain gzip archive, not encrypted — rename to .tar.gz and untar', detail: 'gzip magic detected' };
+    }
+    // Plausible bundle: run a real decrypt probe with a throwaway passphrase.
+    const probe = join(tmpdir(), `diag-probe-${process.pid}-${randomBytes(4).toString('hex')}`);
+    try {
+      await decryptFileStreaming(inputPath, probe, '__diagnostic_probe_not_a_real_passphrase__');
+      // Decrypt SUCCESS with a garbage passphrase is impossible for GCM —
+      // reaching here means something is very wrong; treat as unknown.
+      return { kind: 'unknown', likelyCause: 'decrypt probe succeeded with a bogus passphrase — file format needs manual review', detail: 'probe-decrypt-ok' };
+    } catch (err) {
+      const msg = String(err && err.message || err);
+      if (stat.size < 60) {
+        // Valid-header-looking but too small to hold ciphertext + tag.
+        return { kind: 'truncated', likelyCause: 'file is too small to be a complete bundle (download truncated)', detail: `size=${stat.size}` };
+      }
+      if (/auth|GCM|Unsupported state|decrypt/.test(msg)) {
+        return { kind: 'wrong_passphrase', likelyCause: 'file looks like a valid bundle — most likely a wrong passphrase (exact copy, no added spaces/newlines)', detail: msg.slice(0, 120) };
+      }
+      return { kind: 'unknown', likelyCause: 'unrecognized failure — collect `file <name>.enc` output and file size', detail: msg.slice(0, 120) };
+    } finally {
+      fs.unlink(probe).catch(() => {});
+    }
+  } catch (err) {
+    return { kind: 'unreadable', likelyCause: 'file cannot be read', detail: String(err && err.message || err).slice(0, 120) };
+  }
+}
+
+/**
  * Streaming decryption for large files (>2 GiB).
  * Reads header (salt+iv) from input, decrypts in chunks.
  * Verifies GCM tag at the end.

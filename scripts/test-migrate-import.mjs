@@ -36,7 +36,7 @@ import {
   importMigrateBundle,
 } from "./migrate-import.mjs";
 import { encryptBuffer } from "./migrate-export.mjs";
-import { encryptFileStreaming, decryptFileStreaming } from "./migrate-export.mjs";
+import { encryptFileStreaming, decryptFileStreaming, diagnoseEncFile } from "./migrate-export.mjs";
 
 // ─── Test helpers ────────────────────────────────────────────────
 
@@ -753,4 +753,93 @@ test("gatewayCommand: returns gateway subcommand forms", () => {
   const c = gatewayCommand();
   assert.equal(c.start, "openclaw gateway start");
   assert.equal(c.status, "openclaw gateway status");
+});
+// ─── BACK-IOC-028: diagnoseEncFile + friendly decrypt errors ─────
+
+test("diagnoseEncFile: HTML error page detected (expired signed URL saved as .enc)", async () => {
+  const d = mkdtempSync(join(tmpdir(), "mi-diag-"));
+  try {
+    const p = join(d, "1789419975726.tar.gz.enc");
+    writeFileSync(p, "<!DOCTYPE html>\n<html><body><error>SignatureDoesNotMatch</error></body></html>\n");
+    const diag = await diagnoseEncFile(p);
+    assert.equal(diag.kind, "html");
+    assert.match(diag.likelyCause, /error page/i);
+  } finally { rmSync(d, { recursive: true, force: true }); }
+});
+
+test("diagnoseEncFile: openssl Salted__ file detected (wrong-tool failure)", async () => {
+  const d = mkdtempSync(join(tmpdir(), "mi-diag-"));
+  try {
+    const p = join(d, "salted.tar.gz.enc");
+    writeFileSync(p, Buffer.concat([Buffer.from("Salted__"), Buffer.alloc(64, 7)]));
+    const diag = await diagnoseEncFile(p);
+    assert.equal(diag.kind, "openssl_salted");
+    assert.match(diag.likelyCause, /openssl/i);
+  } finally { rmSync(d, { recursive: true, force: true }); }
+});
+
+test("diagnoseEncFile: JSON error body detected", async () => {
+  const d = mkdtempSync(join(tmpdir(), "mi-diag-"));
+  try {
+    const p = join(d, "bad.tar.gz.enc");
+    writeFileSync(p, JSON.stringify({ error: "not found", request_id: "req-0000000000", detail: "signature does not match" }) + "\n");
+    const diag = await diagnoseEncFile(p);
+    assert.equal(diag.kind, "json");
+  } finally { rmSync(d, { recursive: true, force: true }); }
+});
+
+test("diagnoseEncFile: too-small file detected", async () => {
+  const d = mkdtempSync(join(tmpdir(), "mi-diag-"));
+  try {
+    const p = join(d, "tiny.tar.gz.enc");
+    writeFileSync(p, Buffer.alloc(10, 1));
+    const diag = await diagnoseEncFile(p);
+    assert.equal(diag.kind, "too_small");
+  } finally { rmSync(d, { recursive: true, force: true }); }
+});
+
+test("diagnoseEncFile: valid bundle with wrong passphrase -> wrong_passphrase", async () => {
+  const b = await makeBundle({ files: { "dependency-manifest.json": "{}" } });
+  try {
+    const diag = await diagnoseEncFile(b.path);
+    assert.equal(diag.kind, "wrong_passphrase");
+assert.match(diag.likelyCause, /passphrase/i);
+  } finally { b.stagingCleanup(); }
+});
+
+test("unpackBundle: HTML-as-.enc gets specific error, not generic (BACK-IOC-028)", async () => {
+  const d = mkdtempSync(join(tmpdir(), "mi-html-"));
+  try {
+    const p = join(d, "1789419975726.tar.gz.enc");
+    writeFileSync(p, "<!DOCTYPE html><html><body>error page</body></html>");
+    const staging = join(d, "staging");
+    await assert.rejects(
+      () => unpackBundle(p, "correct horse battery staple", staging),
+      /NOT an encrypted bundle/
+    );
+  } finally { rmSync(d, { recursive: true, force: true }); }
+});
+
+test("unpackBundle: openssl file gets specific wrong-tool error (BACK-IOC-028)", async () => {
+  const d = mkdtempSync(join(tmpdir(), "mi-ossl-"));
+  try {
+    const p = join(d, "salted.tar.gz.enc");
+    writeFileSync(p, Buffer.concat([Buffer.from("Salted__"), Buffer.alloc(64, 7)]));
+    const staging = join(d, "staging");
+    await assert.rejects(
+      () => unpackBundle(p, "correct horse battery staple", staging),
+      /encrypted with the openssl CLI/
+    );
+  } finally { rmSync(d, { recursive: true, force: true }); }
+});
+
+test("unpackBundle: wrong passphrase on VALID bundle keeps actionable generic error (BACK-IOC-028)", async () => {
+  const b = await makeBundle({ files: { "dependency-manifest.json": "{}" } });
+  try {
+    const staging = join(b.dir, "staging");
+    await assert.rejects(
+      () => unpackBundle(b.path, "wrong passphrase 123456", staging),
+      /wrong passphrase or corrupt bundle \(run with --diagnose/
+    );
+  } finally { b.stagingCleanup(); }
 });

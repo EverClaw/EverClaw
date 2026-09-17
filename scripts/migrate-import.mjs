@@ -26,7 +26,7 @@ import { join, dirname, resolve, basename } from 'node:path';
 import { homedir, tmpdir, platform } from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { pipeline } from 'node:stream/promises';
-import { decryptBuffer, decryptFileStreaming } from './migrate-export.mjs';
+import { decryptBuffer, decryptFileStreaming, diagnoseEncFile } from './migrate-export.mjs';
 import { OPENCLAW_DIR } from './paths.mjs';
 
 const SUPPORTED_SCHEMA = '2.0';
@@ -211,7 +211,21 @@ export async function unpackBundle(bundlePath, passphrase, stagingDir, expectedC
   try {
     await decryptFileStreaming(bundlePath, tmpTar, passphrase);
   } catch {
-    throw new Error('decryption failed — wrong passphrase or corrupt bundle');
+    // BACK-IOC-028: diagnose WHY decryption failed instead of a generic error.
+    const diag = await diagnoseEncFile(bundlePath);
+    if (diag.kind === 'html' || diag.kind === 'json') {
+      throw new Error(`decryption failed — this file is NOT an encrypted bundle. ${diag.likelyCause}. Re-download via the Dashboard "Download Backup" button (link expires in 1h), then retry.`);
+    }
+    if (diag.kind === 'openssl_salted') {
+      throw new Error(`decryption failed — this file was encrypted with the openssl CLI. Do NOT use migrate-import.mjs or openssl on agent bundles; agent bundles (.tar.gz.enc from the Dashboard) decrypt ONLY with this script.`);
+    }
+    if (diag.kind === 'plain_gzip') {
+      throw new Error('decryption failed — file is a plain gzip archive, not an encrypted bundle. Rename to .tar.gz and extract with tar.');
+    }
+    if (diag.kind === 'too_small' || diag.kind === 'truncated') {
+      throw new Error(`decryption failed — file is incomplete (${diag.detail}). Re-download the bundle and compare file size with the Dashboard before retrying.`);
+    }
+    throw new Error('decryption failed — wrong passphrase or corrupt bundle (run with --diagnose for a detailed analysis)');
   }
   const extractDir = join(stagingDir, 'extracted');
   mkdirSync(extractDir, { recursive: true, mode: 0o700 });
@@ -557,7 +571,7 @@ export async function importMigrateBundle(options = {}) {
 // ── CLI ──────────────────────────────────────────────────────────
 
 function parseArgs(argv) {
-  const args = { importPath: null, passphrase: null, expectedChecksum: null, force: false, dryRun: false, help: false };
+  const args = { importPath: null, passphrase: null, expectedChecksum: null, force: false, dryRun: false, diagnose: false, help: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     const val = () => { if (i + 1 >= argv.length) { console.error(`❌ ${a} requires a value`); process.exit(1); } return argv[++i]; };
@@ -567,6 +581,7 @@ function parseArgs(argv) {
       case '--expected-checksum': args.expectedChecksum = val(); break;
       case '--force': args.force = true; break;
       case '--dry-run': args.dryRun = true; break;
+      case '--diagnose': args.diagnose = (i + 1 < argv.length && !argv[i + 1].startsWith('--')) ? val() : true; break;
       case '--help': args.help = true; break;
       default: console.error(`❌ Unknown flag: ${a}`); process.exit(1);
     }
@@ -576,11 +591,12 @@ function parseArgs(argv) {
 
 if (import.meta.main) {
   const args = parseArgs(process.argv.slice(2));
-  if (args.help || !args.importPath) {
+  if (args.help || (!args.importPath && !args.diagnose)) {
     console.log(`migrate-import — Full-Host Migration Import (Gap 8)
 
 Usage:
   node migrate-import.mjs --import <bundle.tar.gz.enc> [--force] [--dry-run] [--expected-checksum <sha256>]
+  node migrate-import.mjs --diagnose <file.tar.gz.enc>   (no passphrase needed)
 
 Flags:
   --import <path>       Bundle to import (required)
@@ -591,11 +607,25 @@ Flags:
                         protects against re-tarred tampering.
   --force               Overwrite existing openclaw.json
   --dry-run             Show plan without changing anything
+  --diagnose <path>     Analyze a .enc file WITHOUT decrypting: reports whether
+                        it is a valid bundle, an HTML/JSON error page saved by
+                        the browser, an openssl-encrypted file, or truncated.
+
+NOTE: Agent bundles are AES-256-GCM (custom format) — they are NOT openssl
+files. Never decrypt them with the openssl CLI (that fails with "bad magic
+number"). Always use this script.
 
 AFTER IMPORT: run the verification checklist, then DELETE the bundle.`);
     process.exit(args.help ? 0 : 1);
   }
   try {
+    if (args.diagnose) {
+      const target = args.diagnose || args.importPath;
+      if (!target) { console.error('❌ --diagnose requires a file path'); process.exit(1); }
+      const diag = await diagnoseEncFile(target);
+      console.log(JSON.stringify({ file: target, ...diag }, null, 2));
+      process.exit(0);
+    }
     importMigrateBundle(args).then(res => {
       console.log(JSON.stringify(res, null, 2));
       if (!res.dryRun && res.burn) {
