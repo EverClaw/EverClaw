@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>OpenClaw — Sign In</title>
+  <title>__BRAND_NAME__ — Sign In</title>
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -44,6 +44,18 @@
       justify-content: center;
       margin: 0 auto 16px;
       font-size: 32px;
+    }
+
+    /* Image-mode brand icon (BRAND_ICON="img:<path>"): real artwork
+       (OpenClaw mascot, transparent PNG) on a white app-icon chip. */
+    .logo-icon .logo-img {
+      width: 64px;
+      height: 64px;
+      background: #ffffff;
+      border-radius: 16px;
+      display: block;
+      object-fit: contain;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
     }
 
     .logo h1 {
@@ -157,10 +169,14 @@
     Configuration injected by the auth proxy at serve time.
     The bundled login-app reads these window globals.
     No secrets — PRIVY_APP_ID and PRIVY_CLIENT_ID are public values.
+    The proxy substitutes each placeholder with a JSON-encoded JS string
+    literal (quotes included, '<' escaped as \u003c) — the template carries
+    NO surrounding quotes, so env values can never break out of the script
+    block.
   -->
   <script>
-    window.__EVERCLAW_PRIVY_APP_ID__ = '__PRIVY_APP_ID__';
-    window.__EVERCLAW_PRIVY_CLIENT_ID__ = '__PRIVY_CLIENT_ID__';
+    window.__EVERCLAW_PRIVY_APP_ID__ = __PRIVY_APP_ID__;
+    window.__EVERCLAW_PRIVY_CLIENT_ID__ = __PRIVY_CLIENT_ID__;
   </script>
 
   <!--

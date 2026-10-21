@@ -520,12 +520,51 @@ async function loadLoginPage() {
     const htmlPath = join(__dirname, 'login.html');
     let html = await readFile(htmlPath, 'utf8');
 
-    // Inject configuration values at serve time
-    html = html.replace(/__PRIVY_APP_ID__/g, CONFIG.privyAppId);
-    html = html.replace(/__PRIVY_CLIENT_ID__/g, CONFIG.privyClientId);
-    html = html.replace(/__BRAND_ICON__/g, escapeHtml(CONFIG.brandIcon));
-    html = html.replace(/__BRAND_NAME__/g, escapeHtml(CONFIG.brandName));
-    html = html.replace(/__BRAND_TAGLINE__/g, escapeHtml(CONFIG.brandTagline));
+    // Inject configuration values at serve time.
+    // Function-form replacements: String.replace interprets "$&"/"$'"/"$`"/"$$"
+    // sequences in a STRING replacement, letting env-set brand values splice
+    // surrounding HTML. The function form substitutes literally.
+    //
+    // Placeholder contexts differ, so encoders differ:
+    // - BRAND_* placeholders land in HTML text/attribute context → escapeHtml.
+    // - PRIVY_* placeholders land inside a <script> block (JS string literal
+    //   context) → jsLit: JSON.stringify + '<' → '\u003c'. escapeHtml is
+    //   WRONG there (entities are not decoded inside <script>, and '/' is
+    //   never escaped so '</script>' would still break out). jsLit makes any
+    //   env value an inert string literal — quote/backslash/newline/control
+    //   chars and '</script>' sequences cannot escape the block.
+    const jsLit = (s) => JSON.stringify(String(s)).replace(/</g, '\\u003c');
+    html = html.replace(/__PRIVY_APP_ID__/g, () => jsLit(CONFIG.privyAppId));
+    html = html.replace(/__PRIVY_CLIENT_ID__/g, () => jsLit(CONFIG.privyClientId));
+    // Brand icon: a plain text value (emoji/unicode glyph) is escaped as-is.
+    // The "img:<path>" convention renders an image tag instead, so manifests
+    // can brand the login page with real artwork (e.g. the OpenClaw mascot
+    // served from /auth/logo.png). Hermes-style text glyphs are unaffected.
+    // Detection is trim + case-insensitive. The src must be a strict local
+    // image asset path — leading '/', NOT protocol-relative ('//') or
+    // backslash ('/\'), URL path+query charset only, and the path portion
+    // must reference an image file (.png/.svg/.webp; a query string is
+    // allowed for cache-busting, e.g. /auth/logo.png?v=20261021) — so
+    // external URLs, javascript:/data: URIs, non-image same-origin GETs,
+    // whitespace and control characters all fall back to the escaped-text
+    // path.
+    const brandIconValue = CONFIG.brandIcon.trim();
+    const brandIconSrc = brandIconValue.toLowerCase().startsWith('img:')
+      ? brandIconValue.slice(4).trim()
+      : '';
+    const brandIconPath = brandIconSrc.split('?')[0];
+    const isLocalImagePath =
+      brandIconPath.startsWith('/') &&
+      !brandIconPath.startsWith('//') &&
+      !brandIconPath.startsWith('/\\') &&
+      /^[A-Za-z0-9._~?=/-]*$/.test(brandIconSrc) &&
+      /\.(png|svg|webp)$/i.test(brandIconPath);
+    const brandIconHtml = isLocalImagePath
+      ? `<img src="${escapeHtml(brandIconSrc)}" alt="${escapeHtml(CONFIG.brandName)} logo" class="logo-img">`
+      : escapeHtml(CONFIG.brandIcon);
+    html = html.replace(/__BRAND_ICON__/g, () => brandIconHtml);
+    html = html.replace(/__BRAND_NAME__/g, () => escapeHtml(CONFIG.brandName));
+    html = html.replace(/__BRAND_TAGLINE__/g, () => escapeHtml(CONFIG.brandTagline));
 
     loginPageHtml = html;
     console.log('✅ Login page loaded');
@@ -1620,7 +1659,10 @@ async function handleRequest(req, res) {
       const logoData = await readFile(logoPath);
       res.writeHead(200, {
         'Content-Type': 'image/png',
-        'Cache-Control': 'public, max-age=604800, immutable',
+        // No 'immutable': the asset changes on rebrands (2026-10-21 mascot swap).
+        // 1-day max-age bounds the stale-logo window for returning users
+        // after a container upgrade; browsers revalidate on expiry.
+        'Cache-Control': 'public, max-age=86400',
         'X-Content-Type-Options': 'nosniff',
       });
       res.end(logoData);
