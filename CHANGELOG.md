@@ -2,6 +2,62 @@
 
 All notable changes to EverClaw are documented here.
 
+## [Unreleased] - 2026-10-21
+
+### Added — OpenClaw mascot logo for the auth-proxy login page (img: brand-icon mode)
+
+**InstallOpenClaw.xyz rebrand (David GO 2026-10-21):** the Privy/Fred/Manifest login page
+(served by the auth-proxy inside each container — not the Lovable frontend) now brands
+with real artwork instead of the lobster emoji default.
+
+- `assets/logo.png` (auth-proxy): legacy 500×110 "InstallOpenClaw" wordmark banner →
+  new OpenClaw mascot (480×480 transparent PNG, 64,009 bytes). Served at the existing
+  public `/auth/logo.png` route; the Privy login modal logo (`login-app.jsx`) picks it
+  up too.
+- `server.mjs`: `BRAND_ICON="img:<path>"` convention — renders an `<img>` instead of
+  an escaped text glyph. Detection is trim + case-insensitive; the src must be a strict
+  local image-asset path (leading `/`, not protocol-relative `//` or backslash `/\`,
+  URL path+query charset, path portion ending `.png`/`.svg`/`.webp`) — external URLs,
+  `javascript:`/`data:` URIs, and non-image same-origin GETs all fall back to the
+  escaped-text path. Plain text values (emoji `🦞`, Hermes `☤`) keep the old path
+  unchanged. All five placeholder replacements now use function form (`$&`/`$'`/"$`"
+  sequences in env-set brand values can no longer splice surrounding HTML), and the
+  two Privy-ID placeholders are JS-literal encoded (`JSON.stringify` + `<` → `\u003c`)
+  — env values can never break out of the `<script>` block that feeds the bundled
+  login app.
+- `login.html`: `<title>` now follows `__BRAND_NAME__` (footer stays "Powered by OpenClaw
+  & Privy" as tech attribution, Hermes pattern). `.logo-icon .logo-img` CSS — 64px white
+  app-icon chip, radius 16, object-fit contain.
+- `login-app.jsx`: Privy modal logo now `/auth/logo.png?v=20261021` — one-time cache-bust
+  so returning users (who pinned the old wordmark under the previous `immutable` 7-day
+  header) see the mascot immediately; the logo route drops `immutable` and serves
+  `Cache-Control: public, max-age=86400` so future rebrands need no bust.
+- `test-proxy.mjs`: new test 18 — img-mode renders the `<img>` tag (src/class/alt),
+  title interpolation, no emoji glyph, `/auth/logo.png` serves the exact 64,009-byte
+  mascot with PNG magic bytes and the 1-day cache header; hostile-src guards
+  (`img:javascript:`, `img:https:`, `img:data:`, `img://`, `img:/\`, bare `img:`,
+  `img:/../secret`, `img:*.js`) fall back to escaped text; whitespace-trim and
+  case-insensitive and query-string positives; `$`-bearing brand renders literally
+  (no splice duplication); hostile `PRIVY_APP_ID` values render as inert JS literals
+  (exactly two script blocks, no `</script><script>` breakout). Fixed 7 stale
+  pre-rebrand assertions ('EverClaw'/'Sign in' → 'OpenClaw'/'Sign In'; identical 7
+  failed on baseline). Suite: 84/84.
+
+**Audit trail:** Grok 4.20 (xAI API): R1 Excellent (C=2 S=1 Y=2) → fixes → R2
+Excellent/SHIP (C=0 S=0 Y=2). Claude Opus 4.8 cross-model (Venice): R1 Good — found
+protocol-relative/backslash guard bypass + `$`-replacement injection + immutable-cache
+staleness (all fixed); R2 Good — found Privy-ID raw injection into `<script>` context
+(fixed with JS-literal encoding + template quote removal) + transition cache-bust
+(fixed with `?v=20261021` + no-immutable header); R3 Excellent — VERDICT: SHIP (all
+prior-round blockers resolved, fix code sound, remaining items non-blocking backlog). See
+memory/projects/everclaw/logo-rebrand-2026-10-21/audit/. Stage 6 PII scan: 0 findings.
+CSP header deferred (needs inline-script nonce + Privy domain enumeration + E2E; both
+blocking injection vectors closed) — backlogged.
+
+**Deploy order (matters):** new GHCR image tag lands first (Supabase `OPENCLAW_IMAGE`
+bump), then `BRAND_ICON=img:/auth/logo.png` env flip, then buffer rebuild + container
+upgrades — old image + new env would render the legacy wordmark.
+
 ## [Unreleased] - 2026-09-10
 
 ### Fixed — migrate-import tar type-field parsing + SOP-001 Stage 5 hardening
