@@ -2,7 +2,7 @@
 
 All notable changes to EverClaw are documented here.
 
-## [Unreleased] - 2026-10-21 — Security: Node.js 22.23.4 base pin (Oct 21 patch wave)
+## [2026.10.21.1940] - 2026-10-21 — Security: Node.js 22.23.4 base pin (Oct 21 patch wave)
 
 ### Security — Node.js runtime patch (David GO 2026-10-21 19:27 CDT)
 
