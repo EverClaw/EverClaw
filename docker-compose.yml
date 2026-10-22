@@ -18,7 +18,7 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        EVERCLAW_VERSION: "2026.10.21.1450"   # EverClaw version — never uses 'v' prefix (see Dockerfile policy)
+        EVERCLAW_VERSION: "2026.10.21.1940"   # EverClaw version — never uses 'v' prefix (see Dockerfile policy)
         OPENCLAW_VERSION: "v2026.7.1-2"       # OpenClaw version — always uses 'v' prefix (see Dockerfile policy)
     container_name: everclaw
     restart: unless-stopped

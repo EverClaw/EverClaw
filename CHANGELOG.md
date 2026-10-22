@@ -2,6 +2,26 @@
 
 All notable changes to EverClaw are documented here.
 
+## [Unreleased] - 2026-10-21 — Security: Node.js 22.23.4 base pin (Oct 21 patch wave)
+
+### Security — Node.js runtime patch (David GO 2026-10-21 19:27 CDT)
+
+- **Dockerfile:** pinned `node:22-bookworm` → `node:22.23.4-bookworm` (openclaw-builder)
+  and `node:22-bookworm-slim` → `node:22.23.4-bookworm-slim` (auth-proxy-builder,
+  production). Node.js security release 22.23.4 (2026-10-21) fixes 10 CVEs including
+  the Brotli decoder out-of-bounds write RCE (CVE-2026-111497), DNS NUL truncation
+  (CVE-2026-105482), and TLS certificate hostname bypasses (CVE-2026-105483,
+  CVE-2026-106069). Docker Hub pushed the patched `node:22` images at 14:38 UTC today;
+  the floating tag already resolved to the patched digest (sha256:82693da9…) — the
+  explicit pin makes the security provenance deterministic for this and future builds.
+- **npm audit fix:** ws 8.x HIGH (uninitialized memory disclosure GHSA-58qx-3vcg-4xpx,
+  memory-exhaustion DoS GHSA-96hv-2xvq-fx4p) via viem → ws 8.21.0, viem 2.57.8, ox
+  0.14.56. viem is a devDependency, so shipped images were never exposed; build
+  tooling is patched regardless. Lockfile version field reconciled (was stale at
+  2026.6.1-2.1829).
+- No application-code changes — runtime code is identical to v2026.10.21.1450
+  (Grok 4.20 ×2 + Claude Opus 4.8 ×3 audited today, suite 84/84, PII scan clean).
+
 ## [Unreleased] - 2026-10-21
 
 ### Added — OpenClaw mascot logo for the auth-proxy login page (img: brand-icon mode)
