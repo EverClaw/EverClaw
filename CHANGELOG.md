@@ -2,6 +2,22 @@
 
 All notable changes to EverClaw are documented here.
 
+## [2026.10.21.2345] - 2026-10-21 — Fix: ENV EVERCLAW_VERSION literal (runtime banner)
+
+### Fixed — Dockerfile ARG→ENV propagation (canary E2E finding, David GO 23:42 CDT)
+
+- **Dockerfile:331:** `ENV EVERCLAW_VERSION=2026.9.10.2207` was a hardcoded literal instead of
+  `${EVERCLAW_VERSION}` — the CI `--build-arg EVERCLAW_VERSION=…` never propagated to runtime.
+  Effect: every image since the 2026.9.10.2207 release printed "EverClaw v2026.9.10.2207" in the
+  boot banner regardless of the actual image version (2026.10.21.1450 and 2026.10.21.1940 included).
+  Image LABEL `org.opencontainers.image.version` was always correct — only the runtime ENV was stale.
+- **Blast radius (verified):** exactly one consumer — docker-entrypoint.sh:33 banner echo.
+  No functional usage of the variable anywhere in the runtime tree.
+- **Fix:** `ENV EVERCLAW_VERSION=${EVERCLAW_VERSION}` (+ ARG default refreshed to this version).
+  Found by the Stage 3 single-instance canary E2E; missed by both model audits (outside the diff
+  context — lesson recorded).
+- Base image pin unchanged from 2026.10.21.1940: node:22.23.4-bookworm(-slim). No other changes.
+
 ## [2026.10.21.1940] - 2026-10-21 — Security: Node.js 22.23.4 base pin (Oct 21 patch wave)
 
 ### Security — Node.js runtime patch (David GO 2026-10-21 19:27 CDT)
