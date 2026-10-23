@@ -69,13 +69,20 @@ fi
 if [ -f "$CONFIG_FILE" ] && jq . "$CONFIG_FILE" > /dev/null 2>&1; then
   TMP_WS=$(mktemp)
   # jq 1.6-safe (bookworm-slim ships jq 1.6): no trim/IN — use gsub + index.
+  # Explicit-root form: bind $root first so del() always operates on the full
+  # document, never the trimmed-string pipeline input (audit finding, round 1).
   if jq '
-    if ((.tools.web.search.provider? | type) == "string") then
-      (.tools.web.search.provider | gsub("^[[:space:]]+|[[:space:]]+$"; "")) as $t
-      | if ($t == "" or (["searxng", "kimi", "firecrawl"] | index($t) == null)) then
-          del(.tools.web.search.provider)
-        else . end
-    else . end
+    . as $root |
+    if (($root.tools.web.search.provider? | type) == "string") then
+      ($root.tools.web.search.provider | gsub("^[[:space:]]+|[[:space:]]+$"; "")) as $t |
+      if ($t == "" or (["searxng", "kimi", "firecrawl"] | index($t) == null)) then
+        $root | del(.tools.web.search.provider)
+      else
+        $root
+      end
+    else
+      $root
+    end
   ' "$CONFIG_FILE" > "$TMP_WS" 2>/dev/null; then
     if ! diff -q "$CONFIG_FILE" "$TMP_WS" > /dev/null 2>&1; then
       mv "$TMP_WS" "$CONFIG_FILE"
