@@ -2,6 +2,23 @@
 
 All notable changes to EverClaw are documented here.
 
+## [2026.10.22.HHMM] - 2026-10-22 — Fix: strip unsupported web_search providers at boot (SEC-WAVE fleet incident)
+
+### Fixed — Gateway boot crash on configs referencing unbundled web_search providers (David GO 19:39 CDT)
+
+- **docker-entrypoint.sh:** added a boot-time sanitizer that strips `tools.web.search.provider`
+  unless the provider is bundled in the image (searxng / kimi / firecrawl — the only providers
+  OpenClaw v2026.7.1-2 accepts without an external plugin, verified via `openclaw doctor --lint`).
+- **Root cause:** OpenClaw hard-fails config validation when the provider's plugin is not
+  available (e.g. `parallel-free` from the external `@openclaw/parallel-plugin`, or
+  tavily/exa/perplexity). This crash-looped 2 fleet leases on image 2026.10.21.2345 and
+  reproduced on every restore/upgrade carrying such configs. The gateway now boots with web
+  search unconfigured (the image default) instead of exiting.
+- **Hardening:** extracted shared `repair_json_config()` for atomic config repair; sanitizer
+  is jq 1.6-safe (explicit-root form) and covered by a 17-case regression test that pins the
+  allowlist against the live entrypoint.
+- **Tests:** `tests/entrypoint-websearch-sanitizer.test.mjs` — 17 tests, all passing.
+
 ## [2026.10.21.2345] - 2026-10-21 — Fix: ENV EVERCLAW_VERSION literal (runtime banner)
 
 ### Fixed — Dockerfile ARG→ENV propagation (canary E2E finding, David GO 23:42 CDT)
