@@ -55,6 +55,39 @@ if [ -f "$CONFIG_FILE" ] && jq . "$CONFIG_FILE" > /dev/null 2>&1; then
   fi
 fi
 
+# Defensive strip of unsupported web_search providers (SEC-WAVE fleet incident 2026-10-22)
+# OpenClaw hard-fails config validation at gateway boot when tools.web.search.provider
+# references a provider whose plugin is NOT bundled in this image — e.g. "parallel-free"
+# (from the external @openclaw/parallel-plugin), or tavily/exa/perplexity (external
+# plugins the image never ships). This crash-looped 2 fleet leases on the 2026.10.21.2345
+# image and would reproduce on any restore that copies such configs.
+# Only these providers ship bundled in OpenClaw v2026.7.1-2: searxng, kimi, firecrawl
+# (empirically verified via `openclaw doctor --lint`). Anything else — or an empty string,
+# which validation separately rejects — is stripped so the gateway boots; web search then
+# falls back to unconfigured (matches the image default config).
+# KEEP IN SYNC with the bundled provider set when the image's OpenClaw version bumps.
+if [ -f "$CONFIG_FILE" ] && jq . "$CONFIG_FILE" > /dev/null 2>&1; then
+  TMP_WS=$(mktemp)
+  # jq 1.6-safe (bookworm-slim ships jq 1.6): no trim/IN — use gsub + index.
+  if jq '
+    if ((.tools.web.search.provider? | type) == "string") then
+      (.tools.web.search.provider | gsub("^[[:space:]]+|[[:space:]]+$"; "")) as $t
+      | if ($t == "" or (["searxng", "kimi", "firecrawl"] | index($t) == null)) then
+          del(.tools.web.search.provider)
+        else . end
+    else . end
+  ' "$CONFIG_FILE" > "$TMP_WS" 2>/dev/null; then
+    if ! diff -q "$CONFIG_FILE" "$TMP_WS" > /dev/null 2>&1; then
+      mv "$TMP_WS" "$CONFIG_FILE"
+      echo "🔧 Stripped unsupported web_search provider from config (gateway boot fix)"
+    else
+      rm -f "$TMP_WS"
+    fi
+  else
+    rm -f "$TMP_WS"
+  fi
+fi
+
 # ─── Template Placeholder Values ─────────────────────────────────────────────
 # Resolve placeholder values from env vars with sensible defaults.
 # These are substituted into boot templates during first-run scaffold.
@@ -66,17 +99,32 @@ fi
 TPL_AGENT_NAME="${AGENT_NAME:-${EVERCLAW_AGENT_NAME:-OpenClaw}}"
 # Defense-in-depth: AGENT_NAME is substituted into boot templates via sed, so it must
 # be a safe single-line display string. InstallOpenClaw sanitizes at every writer layer
-# (deploy-agent/restore/upgrade/relabel via sanitize-agent-name.ts: ^[a-zA-Z0-9 _-]+$, max
-# 50) and the DB has a CHECK constraint, but the entrypoint is the final consumer — fail
-# closed here so a hostile/unsanitized env value can never break the sed substitution or
-# inject into a scaffolded template. Mirrors the allowlist and 50-char cap of
-# sanitize-agent-name.ts; fails closed to "OpenClaw" on rejection.
-TPL_AGENT_NAME="$(printf '%s' "$TPL_AGENT_NAME" | tr -d '\n\r' | head -c 50)"
-# Locale-stable ASCII allowlist (LC_ALL=C prevents locale widening of a-z/A-Z ranges).
-if ! printf '%s' "$TPL_AGENT_NAME" | LC_ALL=C grep -Eq '^[a-zA-Z0-9 _-]+$'; then
+# (sanitize-agent-name.ts: Unicode letters/numbers + space/hyphen/underscore/CJK middle
+# dot, max 50 chars) and the DB has a CHECK constraint, but the entrypoint is the final
+# consumer — fail closed here so a hostile/unsanitized env value can never break the sed
+# substitution or inject into a scaffolded template. Mirrors the CHARACTER CLASS and
+# invisible/bidi rules from sanitize-agent-name.ts (CJK support added 2026-10-14);
+# length bounds are enforced by callers + DB CHECK — the entrypoint only validates
+# safe single-line display substitution and truncates to 50 characters.
+# 1) Validate the RAW env value as a SINGLE STRING (slurp mode, not -ne —
+#    -ne validates line-by-line, so an embedded newline would be validated as
+#    two clean lines and slip through). Also rejects invisible/bidi characters
+#    (zero-width, bidi overrides, soft hyphen, BOM). perl is guaranteed present
+#    (node:22-bookworm-slim); GNU grep in bookworm-slim lacks -P. -CSD: decode
+#    UTF-8; invalid sequences fail the decode (-> fallback). Missing perl also
+#    fails closed.
+if ! printf '%s' "$TPL_AGENT_NAME" | perl -CSD -e '
+  my $name = do { local $/; <STDIN> };
+  exit 1 if $name =~ /[\x{200B}-\x{200F}\x{202A}-\x{202E}\x{2060}\x{2066}-\x{2069}\x{FEFF}\x{AD}\x{61C}\x{2028}\x{2029}]/;  # invisible/bidi (matches TS INVISIBLE_CHARS incl. U+200E/200F in 200B-200F range)
+  exit 1 if $name !~ /^[\p{L}\p{N} _\-\x{30FB}]+$/;
+  exit 0;' 2>/dev/null; then
   echo "entrypoint: invalid AGENT_NAME, using 'OpenClaw'" >&2
   TPL_AGENT_NAME="OpenClaw"
 fi
+# 2) Normalize to a safe single-line display string AFTER validation: strip
+#    newlines/carriage returns, truncate to 50 CHARACTERS (not bytes — byte
+#    truncation can split a multibyte character and yield invalid UTF-8).
+TPL_AGENT_NAME="$(printf '%s' "$TPL_AGENT_NAME" | tr -d '\n\r' | perl -CSD -ne 'print substr($_, 0, 50)')"
 # Reject whitespace-only names (they would scaffold a blank heading).
 if [ -z "$(printf '%s' "$TPL_AGENT_NAME" | tr -d '[:space:]')" ]; then
   echo "entrypoint: blank AGENT_NAME, using 'OpenClaw'" >&2
