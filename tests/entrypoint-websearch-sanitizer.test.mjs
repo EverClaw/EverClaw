@@ -23,10 +23,9 @@ import path from "node:path";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const entrypoint = readFileSync(path.join(root, "scripts/docker-entrypoint.sh"), "utf8");
 
-// Extract the jq program from the TMP_WS sanitizer block verbatim.
-// Comment lines use [^\n]* (dotAll would let .* span blocks and grab the
-// wrong jq program — the Streaming/Timeout block later in the file).
-const m = entrypoint.match(/TMP_WS=\$\(mktemp\)\n(?:  # [^\n]*\n)*  if jq '\n([\s\S]*?)\n  ' "\$CONFIG_FILE"/);
+// Extract the jq program from the WEB_SEARCH_REPAIR_FILTER variable verbatim.
+// The filter is applied by the shared repair_json_config() helper.
+const m = entrypoint.match(/WEB_SEARCH_REPAIR_FILTER='\n([\s\S]*?)\n'/);
 assert.ok(m, "web_search sanitizer jq block not found in docker-entrypoint.sh");
 const JQ_PROG = m[1];
 

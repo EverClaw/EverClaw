@@ -39,39 +39,42 @@ if [ ! -f "$CONFIG_FILE" ]; then
   echo "   Config: $CONFIG_FILE"
 fi
 
+# ─── Config Repair Helpers ──────────────────────────────────────────────────
+# Shared atomic repair: apply a jq filter to CONFIG_FILE, swap only when the
+# result differs, clean up on failure. Returns 0 when changed (caller logs).
+# Used by the comment-key strip and the web_search provider sanitizer below.
+repair_json_config() {
+  local filter="$1"
+  local tmp
+  [ -f "$CONFIG_FILE" ] || return 1
+  jq . "$CONFIG_FILE" > /dev/null 2>&1 || return 1
+  tmp=$(mktemp)
+  if jq "$filter" "$CONFIG_FILE" > "$tmp" 2>/dev/null; then
+    if ! diff -q "$CONFIG_FILE" "$tmp" > /dev/null 2>&1; then
+      mv "$tmp" "$CONFIG_FILE"
+      return 0
+    fi
+  fi
+  rm -f "$tmp"
+  return 1
+}
+
 # Defensive strip of underscore-prefixed comment keys (OpenClaw schema is strict)
 # Prevents config validation failures from _note, _comment, _morpheusNote, etc.
-if [ -f "$CONFIG_FILE" ] && jq . "$CONFIG_FILE" > /dev/null 2>&1; then
-  TMP_STRIP=$(mktemp)
-  if jq 'walk(if type == "object" then with_entries(select(.key | startswith("_") | not)) else . end)' "$CONFIG_FILE" > "$TMP_STRIP" 2>/dev/null; then
-    if ! diff -q "$CONFIG_FILE" "$TMP_STRIP" > /dev/null 2>&1; then
-      mv "$TMP_STRIP" "$CONFIG_FILE"
-      echo "🔧 Stripped comment keys from config (OpenClaw schema compliance)"
-    else
-      rm -f "$TMP_STRIP"
-    fi
-  else
-    rm -f "$TMP_STRIP"
-  fi
+if repair_json_config 'walk(if type == "object" then with_entries(select(.key | startswith("_") | not)) else . end)'; then
+  echo "🔧 Stripped comment keys from config (OpenClaw schema compliance)"
 fi
 
 # Defensive strip of unsupported web_search providers (SEC-WAVE fleet incident 2026-10-22)
-# OpenClaw hard-fails config validation at gateway boot when tools.web.search.provider
-# references a provider whose plugin is NOT bundled in this image — e.g. "parallel-free"
-# (from the external @openclaw/parallel-plugin), or tavily/exa/perplexity (external
-# plugins the image never ships). This crash-looped 2 fleet leases on the 2026.10.21.2345
-# image and would reproduce on any restore that copies such configs.
-# Only these providers ship bundled in OpenClaw v2026.7.1-2: searxng, kimi, firecrawl
-# (empirically verified via `openclaw doctor --lint`). Anything else — or an empty string,
-# which validation separately rejects — is stripped so the gateway boots; web search then
-# falls back to unconfigured (matches the image default config).
+# OpenClaw v2026.7.1-2 hard-fails gateway boot when tools.web.search.provider references
+# a provider whose plugin is NOT bundled in this image — e.g. "parallel-free" (external
+# @openclaw/parallel-plugin), or tavily/exa/perplexity. This crash-looped 2 fleet leases
+# and reproduces on any restore carrying such configs. Only searxng/kimi/firecrawl are
+# bundled (verified via openclaw doctor --lint). Anything else — or an empty string — is
+# stripped so the gateway boots with web search unconfigured (matches image default).
 # KEEP IN SYNC with the bundled provider set when the image's OpenClaw version bumps.
-if [ -f "$CONFIG_FILE" ] && jq . "$CONFIG_FILE" > /dev/null 2>&1; then
-  TMP_WS=$(mktemp)
-  # jq 1.6-safe (bookworm-slim ships jq 1.6): no trim/IN — use gsub + index.
-  # Explicit-root form: bind $root first so del() always operates on the full
-  # document, never the trimmed-string pipeline input (audit finding, round 1).
-  if jq '
+# jq 1.6-safe (bookworm-slim): explicit-root form + gsub/index (no trim/IN).
+WEB_SEARCH_REPAIR_FILTER='
     . as $root |
     if (($root.tools.web.search.provider? | type) == "string") then
       ($root.tools.web.search.provider | gsub("^[[:space:]]+|[[:space:]]+$"; "")) as $t |
@@ -83,16 +86,9 @@ if [ -f "$CONFIG_FILE" ] && jq . "$CONFIG_FILE" > /dev/null 2>&1; then
     else
       $root
     end
-  ' "$CONFIG_FILE" > "$TMP_WS" 2>/dev/null; then
-    if ! diff -q "$CONFIG_FILE" "$TMP_WS" > /dev/null 2>&1; then
-      mv "$TMP_WS" "$CONFIG_FILE"
-      echo "🔧 Stripped unsupported web_search provider from config (gateway boot fix)"
-    else
-      rm -f "$TMP_WS"
-    fi
-  else
-    rm -f "$TMP_WS"
-  fi
+'
+if repair_json_config "$WEB_SEARCH_REPAIR_FILTER"; then
+  echo "🔧 Stripped unsupported web_search provider from config (gateway boot fix)"
 fi
 
 # ─── Template Placeholder Values ─────────────────────────────────────────────
