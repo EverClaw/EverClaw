@@ -2,7 +2,7 @@
 
 All notable changes to EverClaw are documented here.
 
-## [2026.10.22.HHMM] - 2026-10-22 — Fix: strip unsupported web_search providers at boot (SEC-WAVE fleet incident)
+## [2026.10.23.0148] - 2026-10-23 — Fix: strip unsupported web_search providers at boot (SEC-WAVE fleet incident)
 
 ### Fixed — Gateway boot crash on configs referencing unbundled web_search providers (David GO 19:39 CDT)
 

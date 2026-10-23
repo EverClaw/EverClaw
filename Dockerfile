@@ -327,7 +327,7 @@ RUN FDIR="/home/node/.openclaw/workspace/skills/everclaw/flavors/${FLAVOR}"; \
 
 # EVERCLAW_VERSION flows build-arg -> runtime ENV since v2026.10.21.2345
 # (before: ENV was a stale literal, boot banner showed 2026.9.10.2207).
-ARG EVERCLAW_VERSION=2026.10.21.2345
+ARG EVERCLAW_VERSION=2026.10.23.0148
 ENV EVERCLAW_VERSION=${EVERCLAW_VERSION}
 ENV NODE_ENV=production
 ENV EVERCLAW_PROXY_PORT=8083
