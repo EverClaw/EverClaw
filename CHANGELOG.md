@@ -2,7 +2,7 @@
 
 All notable changes to EverClaw are documented here.
 
-## [Unreleased] — Fix: auth-proxy login modal follows Privy dashboard methods (login parity)
+## [2026.10.27.1656] - 2026-10-27 — Fix: auth-proxy login modal follows Privy dashboard methods (login parity)
 
 ### Fixed — hardcoded loginMethods drifted from the Privy dashboards (2026-10-27)
 
