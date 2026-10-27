@@ -2,6 +2,26 @@
 
 All notable changes to EverClaw are documented here.
 
+## [Unreleased] — Fix: auth-proxy login modal follows Privy dashboard methods (login parity)
+
+### Fixed — hardcoded loginMethods drifted from the Privy dashboards (2026-10-27)
+
+- **packages/core/auth-proxy/login-app.jsx:** removed the hardcoded
+  `loginMethods: ['wallet', 'google', 'email', 'apple']` from the PrivyProvider
+  config. The agent login modal now renders the methods enabled on each
+  vertical's Privy app (server-driven) — the same mechanism the main sites use.
+- **Bug class fixed:** config drift between the image and the Privy dashboards.
+  The Apple button rendered but `apple_oauth` is disabled on both apps (dead
+  button), and X/GitHub/Discord were never offered at the agent URL — a user
+  who signed up with those methods on the main site could not sign in to
+  their agent.
+- **test-proxy.mjs:** three drift guards — served bundle has no
+  `loginMethods:[` array literal, SDK server-driven fallback branch present,
+  login-app.jsx source has no hardcoded list. Suite 87/87 (baseline 84/84).
+- Companion: InstallHermes Privy app flags enabled server-side (google,
+  twitter, discord, github, passkey); InstallHermes Lovable frontend list
+  update tracked in the SOP-001 task record.
+
 ## [2026.10.23.0148] - 2026-10-23 — Fix: strip unsupported web_search providers at boot (SEC-WAVE fleet incident)
 
 ### Fixed — Gateway boot crash on configs referencing unbundled web_search providers (David GO 19:39 CDT)
